@@ -722,14 +722,20 @@ function exportCsv() {
   closeActions();
 }
 
-function resetDemo() {
-  state.expenses = demoExpenses.slice();
-  state.budget = clone(defaultBudget);
-  state.recurring = clone(defaultRecurring);
+function clearAllData() {
+  const confirmed = window.confirm("ต้องการล้างข้อมูลทั้งหมดใช่ไหม? รายจ่าย งบประมาณ และรายจ่ายประจำจะถูกลบออกจากเครื่องนี้");
+  if (!confirmed) return;
+
+  state.expenses = [];
+  state.budget = { total: 0, categories: {} };
+  state.recurring = [];
   saveLocalSnapshot();
-  queueAutoSync();
   renderAll();
   closePanels();
+
+  if (state.syncEndpoint) {
+    syncToSheet({ silent: true });
+  }
 }
 
 function setSyncStatus(message, tone = "") {
@@ -1047,8 +1053,10 @@ document.querySelector("[data-sync-form]")?.addEventListener("submit", (event) =
   event.preventDefault();
   const endpoint = event.currentTarget.elements.endpoint.value;
   saveSyncEndpoint(endpoint);
-  setSyncStatus(state.syncEndpoint ? "บันทึกลิงก์แล้ว กำลังโหลดข้อมูล..." : "ลบลิงก์ Google Sheets แล้ว", state.syncEndpoint ? "" : "good");
-  if (state.syncEndpoint) syncFromSheet();
+  setSyncStatus(
+    state.syncEndpoint ? "บันทึกลิงก์แล้ว กด “บันทึกขึ้นชีต” เพื่อส่งข้อมูลชุดแรก" : "ลบลิงก์ Google Sheets แล้ว",
+    "good",
+  );
 });
 
 document.querySelector("[data-sync-download]")?.addEventListener("click", () => {
@@ -1067,8 +1075,8 @@ document.querySelector("[data-sync-upload]")?.addEventListener("click", () => {
   syncToSheet();
 });
 
-document.querySelectorAll("[data-reset-demo]").forEach((button) => {
-  button.addEventListener("click", resetDemo);
+document.querySelectorAll("[data-clear-data]").forEach((button) => {
+  button.addEventListener("click", clearAllData);
 });
 
 document.querySelectorAll("[data-export-csv]").forEach((button) => {
@@ -1141,6 +1149,3 @@ if ("serviceWorker" in navigator) {
 
 setView(location.hash.replace("#", "") || "home");
 renderAll();
-if (state.syncEndpoint) {
-  window.setTimeout(syncFromSheet, 500);
-}
