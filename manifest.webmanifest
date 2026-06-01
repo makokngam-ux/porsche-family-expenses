@@ -1,0 +1,22 @@
+{
+  "name": "ครอบครัวน้องพอร์ช",
+  "short_name": "พอร์ช Expenses",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#fff7f8",
+  "theme_color": "#f85b8b",
+  "description": "แอปบันทึกค่าใช้จ่ายครอบครัว",
+  "icons": [
+    {
+      "src": "family-porsche.jpg",
+      "sizes": "1280x605",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ครอบครัวน้องพอร์ช</title>
+    <meta name="theme-color" content="#f85b8b" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></symbol>
+      <symbol id="i-calendar" viewBox="0 0 24 24"><path d="M8 2v4M16 2v4M3 10h18"/><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></symbol>
+      <symbol id="i-list" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 19V5"/><rect x="7" y="11" width="3" height="8" rx="1"/><rect x="12" y="7" width="3" height="12" rx="1"/><rect x="17" y="4" width="3" height="15" rx="1"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></symbol>
+      <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M7 6l1 15h8l1-15"/><path d="M10 11v6M14 11v6"/></symbol>
+      <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2Z"/><path d="M9 8h6M9 12h6M9 16h4"/></symbol>
+      <symbol id="i-food" viewBox="0 0 24 24"><path d="M4 12h16a8 8 0 0 1-16 0Z"/><path d="M7 12c0-3 2-5 5-5s5 2 5 5"/><path d="M8 19h8"/></symbol>
+      <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 13 7 7h10l2 6"/><rect x="3" y="12" width="18" height="6" rx="2"/><circle cx="7" cy="18" r="1.5"/><circle cx="17" cy="18" r="1.5"/></symbol>
+      <symbol id="i-child" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/><path d="M9.5 9.5c1.5 1.2 3.5 1.2 5 0"/></symbol>
+      <symbol id="i-house" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8"/><path d="M6 10v10h12V10"/><path d="M10 20v-6h4v6"/></symbol>
+      <symbol id="i-bag" viewBox="0 0 24 24"><path d="M6 8h12l1 13H5Z"/><path d="M9 8a3 3 0 0 1 6 0"/></symbol>
+      <symbol id="i-grad" viewBox="0 0 24 24"><path d="m2 9 10-5 10 5-10 5Z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/></symbol>
+      <symbol id="i-health" viewBox="0 0 24 24"><path d="M20 7c0 6-8 12-8 12S4 13 4 7a4 4 0 0 1 7-2.6A4 4 0 0 1 20 7Z"/><path d="M12 8v5M9.5 10.5h5"/></symbol>
+      <symbol id="i-budget" viewBox="0 0 24 24"><path d="M4 7h16v12H4Z"/><path d="M4 10h16"/><path d="M8 15h4"/><circle cx="17" cy="15" r="1"/></symbol>
+      <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></symbol>
+      <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H8a5 5 0 0 1-.7-10A7 7 0 0 1 21 11.5a3.8 3.8 0 0 1-3.5 7.5Z"/><path d="M12 12v6"/><path d="m9 15 3-3 3 3"/></symbol>
+    </svg>
+    <main class="phone-stage" aria-label="ตัวอย่างแอปบันทึกค่าใช้จ่ายครอบครัว">
+      <section class="phone-screen home-screen">
+        <header class="hero">
+          <div class="statusbar">
+            <span>9:41</span>
+            <span class="signal">▮▮▮  wifi  ▰</span>
+          </div>
+          <nav class="topbar" aria-label="แถบเครื่องมือหน้าหลัก">
+            <button class="icon-button badge" aria-label="แจ้งเตือน" data-open-alerts>
+              <svg class="svg-icon"><use href="#i-bell"></use></svg>
+              <strong data-alert-count>3</strong>
+            </button>
+            <button class="icon-button" aria-label="ปฏิทิน" data-open-month><svg class="svg-icon"><use href="#i-calendar"></use></svg></button>
+          </nav>
+          <div class="brand">
+            <h1>ครอบครัวน้องพอร์ช</h1>
+            <p>บันทึกค่าใช้จ่ายครอบครัว</p>
+          </div>
+          <div class="family-portrait family-photo" role="img" aria-label="ครอบครัวน้องพอร์ช">
+            <img src="family-porsche.jpg" alt="ครอบครัวน้องพอร์ช" />
+            <div class="sparkle s1">✦</div>
+            <div class="sparkle s2">♥</div>
+            <div class="sparkle s3">✦</div>
+            <div class="person dad old-portrait">
+              <span class="hair"></span>
+              <span class="face"></span>
+              <span class="body"></span>
+            </div>
+            <div class="person child old-portrait">
+              <span class="hair"></span>
+              <span class="face"></span>
+              <span class="body"></span>
+            </div>
+            <div class="person mom old-portrait">
+              <span class="hair"></span>
+              <span class="face"></span>
+              <span class="body"></span>
+            </div>
+          </div>
+        </header>
+
+        <section class="summary-card">
+          <div>
+            <p class="section-label"><span data-month-label>ค่าใช้จ่ายเดือนนี้</span> <span>👁️</span></p>
+            <strong data-total-amount>฿ 18,560.00</strong>
+            <small>ยอดรวมทั้งหมด</small>
+          </div>
+          <div class="wallet-art" aria-hidden="true">
+            <span class="receipt"></span>
+            <span class="coin"></span>
+          </div>
+        </section>
+
+        <section class="budget-card panel">
+          <div class="panel-title">
+            <h2>งบประมาณเดือนนี้</h2>
+            <a href="#budget" data-open-budget>ตั้งงบ ›</a>
+          </div>
+          <div class="budget-meter">
+            <div>
+              <strong data-budget-used>฿ 0</strong>
+              <small data-budget-text>ใช้ไป 0% ของงบ</small>
+            </div>
+            <span data-budget-left>เหลือ ฿ 0</span>
+          </div>
+          <div class="progress-track"><span data-budget-progress></span></div>
+        </section>
+
+        <section class="quick-grid" aria-label="หมวดค่าใช้จ่ายหลัก">
+          <article class="quick-card peach" data-quick-group="daily">
+            <span class="quick-icon"><svg class="svg-icon"><use href="#i-receipt"></use></svg></span>
+            <div>
+              <h2>ค่าใช้จ่ายประจำวัน</h2>
+              <strong>฿ 6,240.00</strong>
+              <small>8 รายการ</small>
+            </div>
+          </article>
+          <article class="quick-card butter" data-quick-group="education">
+            <span class="quick-icon"><svg class="svg-icon"><use href="#i-grad"></use></svg></span>
+            <div>
+              <h2>การศึกษา</h2>
+              <strong>฿ 4,850.00</strong>
+              <small>4 รายการ</small>
+            </div>
+          </article>
+          <article class="quick-card mint" data-quick-group="health">
+            <span class="quick-icon"><svg class="svg-icon"><use href="#i-health"></use></svg></span>
+            <div>
+              <h2>สุขภาพ</h2>
+              <strong>฿ 2,360.00</strong>
+              <small>3 รายการ</small>
+            </div>
+          </article>
+          <article class="quick-card lilac" data-quick-group="lifestyle">
+            <span class="quick-icon"><svg class="svg-icon"><use href="#i-bag"></use></svg></span>
+            <div>
+              <h2>ไลฟ์สไตล์</h2>
+              <strong>฿ 5,110.00</strong>
+              <small>6 รายการ</small>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel split-panel">
+          <div class="panel-title">
+            <h2>รายการใช้จ่ายแต่ละอย่าง</h2>
+            <a href="#analysis" data-open-analysis>ดูทั้งหมด ›</a>
+          </div>
+          <div class="chart-row">
+            <div class="donut mini-donut" aria-label="กราฟค่าใช้จ่ายรวม" data-donut>
+              <span>รวม<br /><strong data-total-short>฿ 18,560</strong></span>
+            </div>
+            <ul class="legend-list compact" data-legend-list>
+              <li><span><svg class="svg-icon"><use href="#i-food"></use></svg></span><b>อาหาร / เครื่องดื่ม</b><em>32%</em></li>
+              <li><span><svg class="svg-icon"><use href="#i-car"></use></svg></span><b>เดินทาง</b><em>18%</em></li>
+              <li><span><svg class="svg-icon"><use href="#i-child"></use></svg></span><b>ค่าใช้จ่ายลูก</b><em>22%</em></li>
+              <li><span><svg class="svg-icon"><use href="#i-house"></use></svg></span><b>บ้าน / ค่าสาธารณูปโภค</b><em>12%</em></li>
+              <li><span><svg class="svg-icon"><use href="#i-bag"></use></svg></span><b>ช้อปปิ้ง / ของใช้</b><em>10%</em></li>
+              <li><span><svg class="svg-icon"><use href="#i-more"></use></svg></span><b>อื่นๆ</b><em>6%</em></li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="panel recent-panel">
+          <div class="panel-title">
+            <h2>รายการล่าสุด</h2>
+            <a href="#records" data-open-records>ดูทั้งหมด ›</a>
+          </div>
+          <ul class="transaction-list" data-transaction-list>
+            <li><span><svg class="svg-icon"><use href="#i-food"></use></svg></span><b>ซื้อวัตถุดิบทำอาหาร<small>อาหาร / เครื่องดื่ม</small></b><strong>฿ 450.00</strong><em>วันนี้</em></li>
+            <li><span><svg class="svg-icon"><use href="#i-child"></use></svg></span><b>ค่าเทอม น้องพอร์ช<small>ค่าใช้จ่ายลูก</small></b><strong>฿ 2,800.00</strong><em>18 พ.ค. 67</em></li>
+            <li><span><svg class="svg-icon"><use href="#i-car"></use></svg></span><b>เติมน้ำมัน<small>เดินทาง</small></b><strong>฿ 800.00</strong><em>17 พ.ค. 67</em></li>
+            <li><span><svg class="svg-icon"><use href="#i-house"></use></svg></span><b>ค่าน้ำประปา<small>บ้าน / ค่าสาธารณูปโภค</small></b><strong>฿ 285.00</strong><em>16 พ.ค. 67</em></li>
+            <li><span><svg class="svg-icon"><use href="#i-bag"></use></svg></span><b>ซื้อของใช้ในบ้าน<small>ช้อปปิ้ง / ของใช้</small></b><strong>฿ 690.00</strong><em>15 พ.ค. 67</em></li>
+          </ul>
+        </section>
+
+        <footer class="bottom-nav">
+          <a class="active" href="#home" data-nav="home"><span><svg class="svg-icon"><use href="#i-home"></use></svg></span>หน้าหลัก</a>
+          <a href="#records" data-nav="records"><span><svg class="svg-icon"><use href="#i-list"></use></svg></span>บันทึกรายจ่าย</a>
+          <button class="add-expense-button" aria-label="เพิ่มรายการ">+</button>
+          <a href="#analysis" data-nav="analysis"><span><svg class="svg-icon"><use href="#i-chart"></use></svg></span>สรุปรายงาน</a>
+          <a href="#more" data-open-actions><span><svg class="svg-icon"><use href="#i-more"></use></svg></span>เพิ่มเติม</a>
+        </footer>
+      </section>
+
+      <section class="phone-screen analysis-screen" id="analysis">
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="signal">▮▮▮  wifi  ▰</span>
+        </div>
+        <header class="page-header">
+          <button class="icon-button" aria-label="ย้อนกลับ" data-nav="home">‹</button>
+          <div>
+            <h1>การวิเคราะห์</h1>
+            <p><span data-report-month>พฤษภาคม 2567</span> <span>⌄</span></p>
+          </div>
+          <button class="icon-button" aria-label="ปฏิทิน" data-open-month><svg class="svg-icon"><use href="#i-calendar"></use></svg></button>
+        </header>
+
+        <div class="segment" role="tablist" aria-label="ช่วงเวลารายงาน">
+          <button class="selected" role="tab" data-period="month">ภาพรวม</button>
+          <button role="tab" data-period="day">รายวัน</button>
+          <button role="tab" data-period="year">รายเดือน</button>
+        </div>
+
+        <section class="panel analysis-card">
+          <div class="panel-title">
+            <h2>ค่าใช้จ่ายตามหมวดหมู่</h2>
+            <a href="#categories">ดูทั้งหมด ›</a>
+          </div>
+          <div class="big-chart-wrap">
+            <div class="big-donut" aria-label="กราฟโดนัทหมวดหมู่ค่าใช้จ่าย" data-big-donut>
+              <div class="center-label">
+                ค่าใช้จ่ายรวม
+                <strong data-analysis-total>฿ 18,560</strong>
+              </div>
+              <span class="chart-label food" data-category="food"><span class="label-icon"><svg class="svg-icon"><use href="#i-food"></use></svg></span><b>32%</b><small>อาหาร / เครื่องดื่ม</small></span>
+              <span class="chart-label travel" data-category="travel"><span class="label-icon"><svg class="svg-icon"><use href="#i-car"></use></svg></span><b>18%</b><small>เดินทาง</small></span>
+              <span class="chart-label child-label" data-category="child"><span class="label-icon"><svg class="svg-icon"><use href="#i-child"></use></svg></span><b>22%</b><small>ค่าใช้จ่ายลูก</small></span>
+              <span class="chart-label home-label" data-category="home"><span class="label-icon"><svg class="svg-icon"><use href="#i-house"></use></svg></span><b>12%</b><small>บ้าน / ค่าสาธารณูปโภค</small></span>
+              <span class="chart-label shop" data-category="shop"><span class="label-icon"><svg class="svg-icon"><use href="#i-bag"></use></svg></span><b>10%</b><small>ช้อปปิ้ง / ของใช้</small></span>
+              <span class="chart-label other" data-category="other"><span class="label-icon"><svg class="svg-icon"><use href="#i-more"></use></svg></span><b>6%</b><small>อื่นๆ</small></span>
+            </div>
+          </div>
+          <ul class="category-list" data-category-list>
+            <li><span><svg class="svg-icon"><use href="#i-food"></use></svg></span><b>อาหาร / เครื่องดื่ม</b><em>32%</em><strong>฿ 5,920.00</strong><i>›</i></li>
+            <li><span><svg class="svg-icon"><use href="#i-car"></use></svg></span><b>เดินทาง</b><em>18%</em><strong>฿ 3,330.00</strong><i>›</i></li>
+            <li><span><svg class="svg-icon"><use href="#i-child"></use></svg></span><b>ค่าใช้จ่ายลูก</b><em>22%</em><strong>฿ 4,080.00</strong><i>›</i></li>
+            <li><span><svg class="svg-icon"><use href="#i-house"></use></svg></span><b>บ้าน / ค่าสาธารณูปโภค</b><em>12%</em><strong>฿ 2,230.00</strong><i>›</i></li>
+            <li><span><svg class="svg-icon"><use href="#i-bag"></use></svg></span><b>ช้อปปิ้ง / ของใช้</b><em>10%</em><strong>฿ 1,850.00</strong><i>›</i></li>
+            <li><span><svg class="svg-icon"><use href="#i-more"></use></svg></span><b>อื่นๆ</b><em>6%</em><strong>฿ 1,150.00</strong><i>›</i></li>
+          </ul>
+        </section>
+
+        <section class="panel trend-panel">
+          <div class="panel-title">
+            <h2>แนวโน้มค่าใช้จ่าย</h2>
+            <a href="#trend">ดูทั้งหมด ›</a>
+          </div>
+          <div class="trend-chart" aria-label="กราฟเส้นแนวโน้มค่าใช้จ่ายรายเดือน">
+            <svg viewBox="0 0 320 170" role="img">
+              <defs>
+                <linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="#ff6f98" stop-opacity=".24" />
+                  <stop offset="100%" stop-color="#ff6f98" stop-opacity=".03" />
+                </linearGradient>
+              </defs>
+              <path class="area" data-trend-area d="M20 105 L78 82 L136 116 L194 62 L252 34 L300 112 L300 150 L20 150 Z" />
+              <path class="line" data-trend-line d="M20 105 L78 82 L136 116 L194 62 L252 34" />
+              <g class="points" data-trend-points>
+                <circle cx="20" cy="105" r="7" /><circle cx="78" cy="82" r="7" />
+                <circle cx="136" cy="116" r="7" /><circle cx="194" cy="62" r="7" />
+                <circle cx="252" cy="34" r="7" />
+              </g>
+              <g class="labels" data-trend-labels>
+                <text x="20" y="88">12,450</text><text x="78" y="64">14,230</text>
+                <text x="136" y="98">11,890</text><text x="194" y="44">15,620</text>
+                <text x="252" y="16">18,560</text>
+              </g>
+              <g class="months" data-trend-months>
+                <text x="16" y="166">ม.ค.</text><text x="74" y="166">ก.พ.</text>
+                <text x="132" y="166">มี.ค.</text><text x="190" y="166">เม.ย.</text>
+              </g>
+            </svg>
+            <div class="kid-peek" aria-hidden="true">
+              <img src="child-full-body-cutout.png" alt="" />
+            </div>
+          </div>
+        </section>
+
+        <footer class="bottom-nav">
+          <a href="#home" data-nav="home"><span><svg class="svg-icon"><use href="#i-home"></use></svg></span>หน้าหลัก</a>
+          <a href="#records" data-nav="records"><span><svg class="svg-icon"><use href="#i-list"></use></svg></span>บันทึกรายจ่าย</a>
+          <button class="add-expense-button" aria-label="เพิ่มรายการ">+</button>
+          <a class="active" href="#analysis" data-nav="analysis"><span><svg class="svg-icon"><use href="#i-chart"></use></svg></span>สรุปรายงาน</a>
+          <a href="#more" data-open-actions><span><svg class="svg-icon"><use href="#i-more"></use></svg></span>เพิ่มเติม</a>
+        </footer>
+      </section>
+
+      <section class="phone-screen records-screen" id="records">
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="signal">▮▮▮  wifi  ▰</span>
+        </div>
+        <header class="page-header">
+          <button class="icon-button" aria-label="ย้อนกลับ" data-nav="home">‹</button>
+          <div>
+            <h1>บันทึกรายจ่าย</h1>
+            <p><span data-record-count>0 รายการ</span></p>
+          </div>
+          <button class="icon-button" aria-label="ส่งออกข้อมูล" data-export-csv><svg class="svg-icon"><use href="#i-download"></use></svg></button>
+        </header>
+
+        <section class="filter-panel">
+          <label>
+            เดือน
+            <input type="month" data-month-filter />
+          </label>
+          <label>
+            หมวดหมู่
+            <select data-category-filter>
+              <option value="all">ทั้งหมด</option>
+              <option value="food">อาหาร / เครื่องดื่ม</option>
+              <option value="travel">เดินทาง</option>
+              <option value="child">ค่าใช้จ่ายลูก</option>
+              <option value="home">บ้าน / ค่าสาธารณูปโภค</option>
+              <option value="shop">ช้อปปิ้ง / ของใช้</option>
+              <option value="education">การศึกษา</option>
+              <option value="health">สุขภาพ</option>
+              <option value="other">อื่นๆ</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="summary-card records-total">
+          <div>
+            <p class="section-label">ยอดรวมตามตัวกรอง</p>
+            <strong data-filtered-total>฿ 0.00</strong>
+            <small data-filtered-note>0 รายการ</small>
+          </div>
+          <button class="save-button small-action" type="button" data-export-csv>CSV</button>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>รายการทั้งหมด</h2>
+            <a href="#add" class="add-expense-link">เพิ่มรายการ ›</a>
+          </div>
+          <ul class="transaction-list full-list" data-full-transaction-list></ul>
+        </section>
+
+        <section class="panel recurring-panel">
+          <div class="panel-title">
+            <h2>รายจ่ายประจำ</h2>
+            <a href="#recurring" data-open-recurring>เพิ่มบิล ›</a>
+          </div>
+          <ul class="recurring-list" data-recurring-list></ul>
+        </section>
+
+        <footer class="bottom-nav">
+          <a href="#home" data-nav="home"><span><svg class="svg-icon"><use href="#i-home"></use></svg></span>หน้าหลัก</a>
+          <a class="active" href="#records" data-nav="records"><span><svg class="svg-icon"><use href="#i-list"></use></svg></span>บันทึกรายจ่าย</a>
+          <button class="add-expense-button" aria-label="เพิ่มรายการ">+</button>
+          <a href="#analysis" data-nav="analysis"><span><svg class="svg-icon"><use href="#i-chart"></use></svg></span>สรุปรายงาน</a>
+          <a href="#more" data-open-actions><span><svg class="svg-icon"><use href="#i-more"></use></svg></span>เพิ่มเติม</a>
+        </footer>
+      </section>
+    </main>
+
+    <div class="entry-modal" data-entry-modal aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-title">
+          <div>
+            <h2 id="modal-title" data-modal-heading>เพิ่มรายจ่าย</h2>
+            <p>เมื่อบันทึก หน้าสรุปจะอัปเดตทันที</p>
+          </div>
+          <button class="close-modal" type="button" aria-label="ปิด">×</button>
+        </div>
+        <form data-expense-form>
+          <input name="id" type="hidden" />
+          <label>
+            รายการ
+            <input name="title" type="text" placeholder="เช่น ซื้อของเข้าบ้าน" required />
+          </label>
+          <label>
+            หมวดหมู่
+            <select name="category" required>
+              <option value="food">อาหาร / เครื่องดื่ม</option>
+              <option value="travel">เดินทาง</option>
+              <option value="child">ค่าใช้จ่ายลูก</option>
+              <option value="home">บ้าน / ค่าสาธารณูปโภค</option>
+              <option value="shop">ช้อปปิ้ง / ของใช้</option>
+              <option value="education">การศึกษา</option>
+              <option value="health">สุขภาพ</option>
+              <option value="other">อื่นๆ</option>
+            </select>
+          </label>
+          <div class="form-row">
+            <label>
+              จำนวนเงิน
+              <input name="amount" type="number" min="1" step="1" placeholder="0" required />
+            </label>
+            <label>
+              วันที่
+              <input name="date" type="date" required />
+            </label>
+          </div>
+          <div class="form-actions">
+            <button class="ghost-button" type="button" data-reset-demo>เริ่มข้อมูลใหม่</button>
+            <button class="save-button" type="submit" data-submit-label>บันทึก</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="entry-modal action-modal" data-action-modal aria-hidden="true">
+      <div class="modal-card compact-modal" role="dialog" aria-modal="true" aria-labelledby="action-title">
+        <div class="modal-title">
+          <div>
+            <h2 id="action-title">เมนูเพิ่มเติม</h2>
+            <p>จัดการข้อมูลและไฟล์รายงาน</p>
+          </div>
+          <button class="close-actions close-modal" type="button" aria-label="ปิด">×</button>
+        </div>
+        <div class="action-grid">
+          <button type="button" data-export-csv>ส่งออก CSV</button>
+          <button type="button" data-reset-demo>เริ่มข้อมูลใหม่</button>
+          <button type="button" data-open-budget>ตั้งงบประมาณ</button>
+          <button type="button" data-open-recurring>เพิ่มรายจ่ายประจำ</button>
+          <button type="button" data-open-sync>ซิงก์ Google Sheets</button>
+          <button type="button" data-nav="records">ดูรายการทั้งหมด</button>
+          <button type="button" data-nav="analysis">ดูรายงาน</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="entry-modal" data-budget-modal aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="budget-title">
+        <div class="modal-title">
+          <div>
+            <h2 id="budget-title">ตั้งงบประมาณ</h2>
+            <p>กำหนดงบรวมและงบหมวดสำคัญ</p>
+          </div>
+          <button class="close-modal" type="button" aria-label="ปิด">×</button>
+        </div>
+        <form data-budget-form>
+          <label>
+            งบรวมต่อเดือน
+            <input name="total" type="number" min="0" step="100" placeholder="25000" />
+          </label>
+          <div class="form-row">
+            <label>อาหาร / เครื่องดื่ม<input name="food" type="number" min="0" step="100" /></label>
+            <label>เดินทาง<input name="travel" type="number" min="0" step="100" /></label>
+          </div>
+          <div class="form-row">
+            <label>ค่าใช้จ่ายลูก<input name="child" type="number" min="0" step="100" /></label>
+            <label>บ้าน / ค่าสาธารณูปโภค<input name="home" type="number" min="0" step="100" /></label>
+          </div>
+          <div class="form-actions">
+            <button class="ghost-button" type="button" data-close-panels>ยกเลิก</button>
+            <button class="save-button" type="submit">บันทึกงบ</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="entry-modal" data-recurring-modal aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="recurring-title">
+        <div class="modal-title">
+          <div>
+            <h2 id="recurring-title">รายจ่ายประจำ</h2>
+            <p>ใช้เตือนบิลและบันทึกซ้ำทุกเดือนได้เร็วขึ้น</p>
+          </div>
+          <button class="close-modal" type="button" aria-label="ปิด">×</button>
+        </div>
+        <form data-recurring-form>
+          <label>
+            ชื่อรายการ
+            <input name="title" type="text" placeholder="เช่น ค่าน้ำ ค่าไฟ ค่าอินเทอร์เน็ต" required />
+          </label>
+          <label>
+            หมวดหมู่
+            <select name="category" required>
+              <option value="home">บ้าน / ค่าสาธารณูปโภค</option>
+              <option value="child">ค่าใช้จ่ายลูก</option>
+              <option value="education">การศึกษา</option>
+              <option value="travel">เดินทาง</option>
+              <option value="food">อาหาร / เครื่องดื่ม</option>
+              <option value="shop">ช้อปปิ้ง / ของใช้</option>
+              <option value="health">สุขภาพ</option>
+              <option value="other">อื่นๆ</option>
+            </select>
+          </label>
+          <div class="form-row">
+            <label>จำนวนเงิน<input name="amount" type="number" min="1" step="1" required /></label>
+            <label>ครบกำหนดทุกวันที่<input name="day" type="number" min="1" max="31" step="1" required /></label>
+          </div>
+          <div class="form-actions">
+            <button class="ghost-button" type="button" data-close-panels>ยกเลิก</button>
+            <button class="save-button" type="submit">บันทึกบิลประจำ</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="entry-modal" data-alert-modal aria-hidden="true">
+      <div class="modal-card compact-modal" role="dialog" aria-modal="true" aria-labelledby="alert-title">
+        <div class="modal-title">
+          <div>
+            <h2 id="alert-title">แจ้งเตือน</h2>
+            <p>สรุปสิ่งที่ควรดูในเดือนนี้</p>
+          </div>
+          <button class="close-modal" type="button" aria-label="ปิด">×</button>
+        </div>
+        <ul class="alert-list" data-alert-list></ul>
+      </div>
+    </div>
+
+    <div class="entry-modal" data-sync-modal aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="sync-title">
+        <div class="modal-title">
+          <div>
+            <h2 id="sync-title">ซิงก์ Google Sheets</h2>
+            <p>ใส่ลิงก์ Web App จาก Apps Script เพื่อใช้ข้อมูลเดียวกันทุกเครื่อง</p>
+          </div>
+          <button class="close-modal" type="button" aria-label="ปิด">×</button>
+        </div>
+        <form data-sync-form>
+          <label>
+            ลิงก์ Google Apps Script Web App
+            <input name="endpoint" type="url" placeholder="https://script.google.com/macros/s/..." />
+          </label>
+          <div class="sync-status" data-sync-status>ยังไม่ได้เชื่อม Google Sheets</div>
+          <div class="sync-actions">
+            <button class="ghost-button" type="button" data-sync-download>โหลดจากชีต</button>
+            <button class="save-button" type="button" data-sync-upload>บันทึกขึ้นชีต</button>
+          </div>
+          <div class="form-actions">
+            <button class="ghost-button" type="button" data-close-panels>ยกเลิก</button>
+            <button class="save-button" type="submit">บันทึกลิงก์</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <script src="app.js"></script>
+  </body>
+</html>
