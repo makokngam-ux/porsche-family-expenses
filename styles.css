@@ -1435,3 +1435,13 @@ select:focus {
   font-weight: 700;
   white-space: nowrap;
 }
+
+/* กราฟแท่งรายวัน */
+.daily-chart {
+  min-height: 120px;
+}
+.daily-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}

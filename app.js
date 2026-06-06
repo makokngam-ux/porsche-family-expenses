@@ -757,6 +757,52 @@ function renderAll() {
   renderYearly();
   renderAlerts();
   renderTrend();
+  renderDailyChart();
+}
+
+// กราฟแท่งรายวัน — ยอดรวมที่บันทึกจริงของแต่ละวันในเดือนที่เลือก
+function renderDailyChart() {
+  const container = document.querySelector("[data-daily-chart]");
+  if (!container) return;
+  const days = daysInMonth(state.month);
+  const totals = [];
+  for (let d = 1; d <= days; d += 1) {
+    const key = `${state.month}-${String(d).padStart(2, "0")}`;
+    totals.push(sum(state.expenses.filter((e) => toISODate(e.date) === key)));
+  }
+  const monthTotal = totals.reduce((s, t) => s + t, 0);
+  document.querySelectorAll("[data-daily-total]").forEach((el) => {
+    el.textContent = monthTotal ? `รวม ฿${shortMoney.format(monthTotal)}` : "";
+  });
+
+  const max = Math.max(...totals, 1);
+  const W = 320;
+  const H = 150;
+  const top = 12;
+  const bottom = 126;
+  const left = 8;
+  const innerW = W - left * 2;
+  const slot = innerW / days;
+  const barW = Math.max(2, slot - 2);
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  let bars = "";
+  let labels = "";
+  totals.forEach((t, i) => {
+    const day = i + 1;
+    const x = left + i * slot;
+    const h = (t / max) * (bottom - top);
+    const y = bottom - h;
+    const key = `${state.month}-${String(day).padStart(2, "0")}`;
+    const color = t > 0 ? (key === todayKey ? "#f85b8b" : "#ff9bb2") : "#f3dbe3";
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" rx="2" fill="${color}"><title>วันที่ ${day}: ฿${money.format(t)}</title></rect>`;
+    if (day === 1 || day % 5 === 0 || day === days) {
+      labels += `<text x="${(x + barW / 2).toFixed(1)}" y="140" text-anchor="middle" font-size="8" fill="#9a8a92">${day}</text>`;
+    }
+  });
+
+  container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟแท่งยอดรวมรายวัน">${bars}${labels}</svg>`;
 }
 
 function renderYearly() {
@@ -1376,7 +1422,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=31").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=32").catch(() => {});
 }
 
 setView(location.hash.replace("#", "") || "home");
@@ -1391,3 +1437,19 @@ if (state.syncEndpoint) {
 } else {
   initialSyncDone = true;
 }
+
+// โหลดข้อมูลล่าสุดใหม่ทุกครั้งที่เปิด/สลับกลับมาที่แอป (สำคัญสำหรับไอคอนโฮม/PWA ที่ไม่รีเฟรชหน้าเอง)
+let lastResumeSync = Date.now();
+function refreshOnResume() {
+  if (!state.syncEndpoint || !initialSyncDone) return;
+  if (Date.now() - lastResumeSync < 8000) return; // กันยิงซ้ำ
+  lastResumeSync = Date.now();
+  syncFromSheet();
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refreshOnResume();
+});
+window.addEventListener("focus", refreshOnResume);
+window.addEventListener("pageshow", (e) => {
+  if (e.persisted) refreshOnResume();
+});
