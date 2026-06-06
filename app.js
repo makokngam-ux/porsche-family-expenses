@@ -2,6 +2,9 @@ const storageKey = "porsche-family-expenses";
 const budgetStorageKey = "porsche-family-budget";
 const recurringStorageKey = "porsche-family-recurring";
 const syncEndpointStorageKey = "porsche-family-sheet-endpoint";
+// ลิงก์ Google Apps Script Web App เริ่มต้น (ฝังไว้ให้ทุกเครื่องใช้ได้เลย ไม่ต้องกรอกเอง)
+const DEFAULT_SYNC_ENDPOINT =
+  "https://script.google.com/macros/s/AKfycbyMfOvzJL56lBaO1qzLNGRgjPyN4O2ZqwkQt9eMGRISj_6nm35mklvDeLUQStwvF5OBQw/exec";
 
 const categories = {
   food: { label: "อาหาร / เครื่องดื่ม", icon: "i-food", color: "#ff8b9d", group: "daily" },
@@ -126,10 +129,6 @@ function loadRecurring() {
     return fallback;
   }
 }
-
-// ลิงก์ Google Apps Script Web App เริ่มต้น (ฝังไว้ให้ทุกเครื่องใช้ได้เลย ไม่ต้องกรอกเอง)
-const DEFAULT_SYNC_ENDPOINT =
-  "https://script.google.com/macros/s/AKfycbyMfOvzJL56lBaO1qzLNGRgjPyN4O2ZqwkQt9eMGRISj_6nm35mklvDeLUQStwvF5OBQw/exec";
 
 function loadSyncEndpoint() {
   return localStorage.getItem(syncEndpointStorageKey) || DEFAULT_SYNC_ENDPOINT;
@@ -1236,7 +1235,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=25").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=26").catch(() => {});
 }
 
 setView(location.hash.replace("#", "") || "home");
