@@ -904,9 +904,12 @@ async function syncToSheet({ silent = false } = {}) {
 }
 
 let autoSyncTimer = null;
+let initialSyncDone = false;
 
 function queueAutoSync() {
   if (!state?.syncEndpoint) return;
+  // กันข้อมูลหาย: ยังไม่ให้ส่งขึ้นชีตอัตโนมัติ จนกว่าจะโหลดข้อมูลล่าสุดจากชีตเสร็จก่อน
+  if (!initialSyncDone) return;
   window.clearTimeout(autoSyncTimer);
   autoSyncTimer = window.setTimeout(() => {
     syncToSheet({ silent: true });
@@ -1201,6 +1204,11 @@ setView(location.hash.replace("#", "") || "home");
 renderAll();
 
 // ซิงก์สองทาง: โหลดข้อมูลล่าสุดจาก Google Sheet อัตโนมัติทุกครั้งที่เปิดแอป (ถ้าตั้งลิงก์ไว้แล้ว)
+// เปิด auto-save หลังโหลดเสร็จเท่านั้น เพื่อกันข้อมูลเก่าในเครื่องเขียนทับชีต
 if (state.syncEndpoint) {
-  syncFromSheet();
+  Promise.resolve(syncFromSheet()).finally(() => {
+    initialSyncDone = true;
+  });
+} else {
+  initialSyncDone = true;
 }
