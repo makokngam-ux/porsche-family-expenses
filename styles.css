@@ -112,6 +112,32 @@ a {
   cursor: pointer;
 }
 
+/* ตัวเลือกเดือน (input type=month) ซ้อนทับไอคอนปฏิทินแบบโปร่งใส แตะแล้วเปิดปฏิทินได้เลย */
+.month-jump-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.month-jump-input::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
 .badge strong {
   position: absolute;
   top: 0;

@@ -1263,10 +1263,7 @@ document.querySelectorAll("[data-open-sync]").forEach((button) => {
   });
 });
 
-document.querySelectorAll("[data-open-month]").forEach((button) => {
-  button.addEventListener("click", () => setView("records"));
-});
-
+// ปุ่มปฏิทินตอนนี้เป็น <input type="month"> ซ้อนอยู่ (data-month-filter) — เลือกเดือนแล้วดูข้อมูลได้เลย ไม่เด้งไปหน้าอื่น
 document.querySelectorAll("[data-month-filter]").forEach((input) => {
   input.value = state.month;
   input.addEventListener("change", () => {
@@ -1507,7 +1504,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=38").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=39").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
