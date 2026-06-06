@@ -60,7 +60,7 @@ a {
   overflow: hidden;
   min-height: 930px;
   padding: 18px 18px 92px;
-  border: 1px solid rgba(255, 192, 207, 0.6);
+  border: 1px solid transparent;
   border-radius: 34px;
   background: linear-gradient(180deg, #fffdfd 0%, #fff7f9 44%, #fff 100%);
   box-shadow: var(--shadow);
