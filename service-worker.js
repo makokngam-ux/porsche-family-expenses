@@ -1,4 +1,4 @@
-const cacheName = "porsche-family-expenses-v27";
+const cacheName = "porsche-family-expenses-v28";
 const files = [
   "./",
   "./index.html",

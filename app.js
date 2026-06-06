@@ -6,6 +6,18 @@ const syncEndpointStorageKey = "porsche-family-sheet-endpoint";
 const DEFAULT_SYNC_ENDPOINT =
   "https://script.google.com/macros/s/AKfycbyMfOvzJL56lBaO1qzLNGRgjPyN4O2ZqwkQt9eMGRISj_6nm35mklvDeLUQStwvF5OBQw/exec";
 
+// วันผ่อนครบของรายการผ่อน (id ของรายจ่ายประจำ → เดือนที่ผ่อนครบ YYYY-MM) หลังจากนี้จะหยุดเตือน
+const INSTALLMENT_END = {
+  201: "2028-01", // ค่างวดรถยนต์ ผ่อนครบ ม.ค. 2571
+  202: "2026-07", // ผ่อน iPhone ผ่อนครบ ก.ค. 2569
+};
+
+// รายจ่ายประจำปี (เตือนปีละครั้งตามวันครบกำหนด)
+const YEARLY_BILLS = [
+  { id: 301, title: "ประกันรถยนต์", category: "car", amount: 18000, month: 2, day: 21 },
+  { id: 302, title: "ภาษีรถยนต์", category: "car", amount: 1650, month: 2, day: 21 },
+];
+
 const categories = {
   food: { label: "อาหาร / เครื่องดื่ม", icon: "i-food", color: "#ff8b9d", group: "daily" },
   travel: { label: "เดินทาง", icon: "i-car", color: "#ffdc79", group: "daily" },
@@ -229,7 +241,27 @@ function selectedExpenses() {
   return monthlyExpenses();
 }
 
-// รายจ่ายประจำที่ใกล้ครบกำหนด (ภายใน 2 วัน) และยังไม่ได้บันทึกในเดือนนี้ → เด้งเตือนในรายจ่ายล่าสุด
+const THAI_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+// ผ่อนครบหรือยัง (เลยเดือนที่ผ่อนครบ)
+function installmentEnded(recurringId) {
+  const end = INSTALLMENT_END[recurringId];
+  if (!end) return false;
+  const today = new Date();
+  const cur = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  return cur > end;
+}
+
+// เหลืออีกกี่งวด (นับรวมเดือนปัจจุบันถึงเดือนผ่อนครบ)
+function monthsRemaining(recurringId) {
+  const end = INSTALLMENT_END[recurringId];
+  if (!end) return null;
+  const today = new Date();
+  const [ey, em] = end.split("-").map(Number);
+  return Math.max(0, (ey - today.getFullYear()) * 12 + (em - (today.getMonth() + 1)) + 1);
+}
+
+// รายจ่ายประจำเดือนที่ใกล้/เลยกำหนด และยังไม่ได้บันทึกเดือนนี้ → เด้งเตือนในรายจ่ายล่าสุด (ค้างจนกว่าจะกดบันทึก)
 function dueSoonRecurring() {
   const today = new Date();
   const y = today.getFullYear();
@@ -239,27 +271,55 @@ function dueSoonRecurring() {
   const todayMid = new Date(y, m, today.getDate());
   return (state.recurring || [])
     .filter((r) => {
+      if (installmentEnded(r.id)) return false;
       const day = Math.min(Number(r.day) || 1, last);
       const diff = Math.round((new Date(y, m, day) - todayMid) / 86400000);
       const postedThisMonth = state.expenses.some((e) => e.recurringId === r.id && monthOf(e.date) === monthKey);
-      return diff >= 0 && diff <= 2 && !postedThisMonth;
+      return diff <= 2 && !postedThisMonth;
     })
     .sort((a, b) => (Number(a.day) || 1) - (Number(b.day) || 1));
 }
 
-function dueReminderMarkup(item) {
+function yearlyPostedThisYear(id, year) {
+  return state.expenses.some((e) => e.recurringId === id && new Date(e.date).getFullYear() === year);
+}
+
+// รายจ่ายประจำปีที่ใกล้/เลยกำหนด และยังไม่ได้บันทึกในปีนี้
+function yearlyDueSoon() {
+  const today = new Date();
+  const y = today.getFullYear();
+  const todayMid = new Date(y, today.getMonth(), today.getDate());
+  return YEARLY_BILLS.filter((b) => {
+    const diff = Math.round((new Date(y, b.month - 1, b.day) - todayMid) / 86400000);
+    return diff <= 2 && diff >= -31 && !yearlyPostedThisYear(b.id, y);
+  });
+}
+
+function reminderRow(item, whenText) {
   const category = categories[item.category] || categories.other;
+  return `<li class="due-reminder">
+    <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
+    <b>${item.title}<small>⏰ ${whenText}</small></b>
+    <strong>฿ ${money.format(item.amount)}</strong>
+    <button class="small-pill" type="button" data-post-recurring="${item.id}">บันทึก</button>
+  </li>`;
+}
+
+function dueReminderMarkup(item) {
   const today = new Date();
   const last = daysInMonth(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
   const day = Math.min(Number(item.day) || 1, last);
   const diff = Math.round((new Date(today.getFullYear(), today.getMonth(), day) - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
-  const when = diff <= 0 ? "ครบกำหนดวันนี้" : diff === 1 ? "ครบกำหนดพรุ่งนี้" : `ครบกำหนดในอีก ${diff} วัน`;
-  return `<li class="due-reminder">
-    <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
-    <b>${item.title}<small>⏰ ${when} · วันที่ ${day}</small></b>
-    <strong>฿ ${money.format(item.amount)}</strong>
-    <button class="small-pill" type="button" data-post-recurring="${item.id}">บันทึก</button>
-  </li>`;
+  const when = diff > 1 ? `ครบกำหนดในอีก ${diff} วัน (วันที่ ${day})` : diff === 1 ? `ครบกำหนดพรุ่งนี้ (วันที่ ${day})` : diff === 0 ? "ครบกำหนดวันนี้" : `เลยกำหนด ${Math.abs(diff)} วัน`;
+  return reminderRow(item, when);
+}
+
+function yearlyReminderMarkup(item) {
+  const today = new Date();
+  const diff = Math.round((new Date(today.getFullYear(), item.month - 1, item.day) - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
+  const dlabel = `${item.day} ${THAI_MONTHS[item.month - 1]}`;
+  const when = diff > 1 ? `รายปี · อีก ${diff} วัน (${dlabel})` : diff === 1 ? `รายปี · พรุ่งนี้ (${dlabel})` : diff === 0 ? "รายปี · ครบกำหนดวันนี้" : `รายปี · เลยกำหนด ${Math.abs(diff)} วัน`;
+  return reminderRow(item, when);
 }
 
 // ตัวกรองสำหรับลิสต์ "รายการทั้งหมด" — แสดงเฉพาะรายการจริง ไม่รวมรายจ่ายประจำ
@@ -486,12 +546,13 @@ function renderRecurring() {
         .sort((a, b) => Number(a.day) - Number(b.day))
         .map((item) => {
           const category = categories[item.category] || categories.other;
-          const posted = recurringPosted(item);
+          const remain = monthsRemaining(item.id);
+          let note = `${category.label} · ทุกวันที่ ${item.day}`;
+          if (remain !== null) note += installmentEnded(item.id) ? " · ผ่อนครบแล้ว ✓" : ` · เหลืออีก ${remain} งวด`;
           return `<li>
     <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
-            <b>${item.title}<small>${category.label} · ทุกวันที่ ${item.day}</small></b>
+            <b>${item.title}<small>${note}</small></b>
             <strong>฿ ${money.format(item.amount)}</strong>
-            <button class="small-pill" type="button" data-post-recurring="${item.id}" ${posted ? "disabled" : ""}>${posted ? "บันทึกแล้ว" : "บันทึก"}</button>
             <button class="delete-expense" type="button" data-delete-recurring="${item.id}" aria-label="ลบ ${item.title}">${iconMarkup("i-trash")}</button>
           </li>`;
         })
@@ -593,7 +654,7 @@ function sortedByDate(items) {
 function renderTransactions() {
   const recent = document.querySelector("[data-transaction-list]");
   if (recent) {
-    const reminders = dueSoonRecurring().map(dueReminderMarkup).join("");
+    const reminders = dueSoonRecurring().map(dueReminderMarkup).join("") + yearlyDueSoon().map(yearlyReminderMarkup).join("");
     const items = sortedByDate(realMonthlyExpenses()).slice(0, 7);
     const body = items.map((item) => transactionMarkup(item)).join("");
     recent.innerHTML = reminders + body || `<li class="empty-row"><b>ยังไม่มีรายการในเดือนนี้</b></li>`;
@@ -679,8 +740,25 @@ function renderAll() {
   renderCategoryViews();
   renderTransactions();
   renderRecurring();
+  renderYearly();
   renderAlerts();
   renderTrend();
+}
+
+function renderYearly() {
+  const list = document.querySelector("[data-yearly-list]");
+  if (!list) return;
+  const year = new Date().getFullYear();
+  list.innerHTML = YEARLY_BILLS.map((item) => {
+    const category = categories[item.category] || categories.other;
+    const paid = yearlyPostedThisYear(item.id, year);
+    return `<li>
+      <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
+      <b>${item.title}<small>${category.label} · ครบกำหนด ${item.day} ${THAI_MONTHS[item.month - 1]} ทุกปี</small></b>
+      <strong>฿ ${money.format(item.amount)}</strong>
+      <button class="small-pill" type="button" data-post-recurring="${item.id}" ${paid ? "disabled" : ""}>${paid ? "บันทึกแล้ว" : "บันทึก"}</button>
+    </li>`;
+  }).join("");
 }
 
 function openModal(item = null) {
@@ -1222,19 +1300,33 @@ document.body.addEventListener("click", (event) => {
 
   const postButton = event.target.closest("[data-post-recurring]");
   if (postButton) {
-    const item = state.recurring.find((bill) => String(bill.id) === postButton.dataset.postRecurring);
-    if (!item || recurringPosted(item)) return;
-    state.expenses = [
-      {
-        id: Date.now(),
-        recurringId: item.id,
-        title: item.title,
-        category: item.category,
-        amount: Number(item.amount),
-        date: selectedMonthDate(item.day),
-      },
-      ...state.expenses,
-    ];
+    const id = postButton.dataset.postRecurring;
+    const today = new Date();
+    const monthly = (state.recurring || []).find((bill) => String(bill.id) === id);
+    const yearly = YEARLY_BILLS.find((bill) => String(bill.id) === id);
+
+    if (monthly) {
+      const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+      if (state.expenses.some((e) => e.recurringId === monthly.id && monthOf(e.date) === monthKey)) return;
+      const last = daysInMonth(monthKey);
+      const day = String(Math.min(Number(monthly.day) || 1, last)).padStart(2, "0");
+      state.expenses = [
+        { id: Date.now(), recurringId: monthly.id, title: monthly.title, category: monthly.category, amount: Number(monthly.amount), date: `${monthKey}-${day}` },
+        ...state.expenses,
+      ];
+    } else if (yearly) {
+      const yr = today.getFullYear();
+      if (yearlyPostedThisYear(yearly.id, yr)) return;
+      const date = `${yr}-${String(yearly.month).padStart(2, "0")}-${String(yearly.day).padStart(2, "0")}`;
+      state.expenses = [
+        { id: Date.now(), recurringId: yearly.id, title: yearly.title, category: yearly.category, amount: Number(yearly.amount), date },
+        ...state.expenses,
+      ];
+    } else {
+      return;
+    }
+
+    state.month = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
     saveExpenses();
     renderAll();
     return;
@@ -1261,7 +1353,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=27").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=28").catch(() => {});
 }
 
 setView(location.hash.replace("#", "") || "home");

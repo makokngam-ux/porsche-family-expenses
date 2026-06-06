@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="app-icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=27" />
+    <link rel="stylesheet" href="styles.css?v=28" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -334,10 +334,17 @@
 
         <section class="panel recurring-panel">
           <div class="panel-title">
-            <h2>รายจ่ายประจำ</h2>
+            <h2>รายจ่ายประจำ (รายเดือน)</h2>
             <a href="#recurring" data-open-recurring>เพิ่มบิล ›</a>
           </div>
           <ul class="recurring-list" data-recurring-list></ul>
+        </section>
+
+        <section class="panel recurring-panel">
+          <div class="panel-title">
+            <h2>รายจ่ายประจำปี</h2>
+          </div>
+          <ul class="recurring-list" data-yearly-list></ul>
         </section>
 
         <footer class="bottom-nav">
@@ -531,6 +538,6 @@
         </form>
       </div>
     </div>
-    <script src="app.js?v=27"></script>
+    <script src="app.js?v=28"></script>
   </body>
 </html>
