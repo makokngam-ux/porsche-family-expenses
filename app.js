@@ -373,11 +373,25 @@ function renderCategoryViews() {
       : `<li class="empty-row"><b>ยังไม่มีรายจ่ายในช่วงนี้</b></li>`;
   }
 
-  document.querySelectorAll(".chart-label").forEach((label) => {
-    const key = label.dataset.category;
-    const item = items.find((entry) => entry.key === key);
-    if (!item) return;
-    label.querySelector("b").textContent = `${percent(item.total, total)}%`;
+  // สร้างป้ายหมวดรอบโดนัทใหญ่อัตโนมัติจากทุกหมวด (กระจายตำแหน่งเท่าๆ กันรอบวง)
+  document.querySelectorAll("[data-big-donut]").forEach((donut) => {
+    donut.querySelectorAll(".chart-label").forEach((el) => el.remove());
+    const n = items.length;
+    const cx = 119, cy = 119, rx = 150, ry = 142;
+    items.forEach((item, i) => {
+      const angle = (i / n) * 2 * Math.PI - Math.PI / 2;
+      const x = cx + rx * Math.cos(angle);
+      const y = cy + ry * Math.sin(angle);
+      const span = document.createElement("span");
+      span.className = "chart-label";
+      span.dataset.category = item.key;
+      span.style.left = `${Math.round(x - 46)}px`;
+      span.style.top = `${Math.round(y - 30)}px`;
+      span.style.setProperty("--cat-color", item.color);
+      span.style.setProperty("--cat-bg", softColor(item.color));
+      span.innerHTML = `<span class="label-icon">${iconMarkup(item.icon)}</span><b>${percent(item.total, total)}%</b><small>${item.label}</small>`;
+      donut.appendChild(span);
+    });
   });
 }
 
