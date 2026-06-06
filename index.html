@@ -2,14 +2,14 @@
 <html lang="th">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>ครอบครัวน้องพอร์ช</title>
     <meta name="theme-color" content="#f85b8b" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="app-icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=40" />
+    <link rel="stylesheet" href="styles.css?v=41" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -424,13 +424,13 @@
           <button class="close-actions close-modal" type="button" aria-label="ปิด">×</button>
         </div>
         <div class="action-grid">
-          <button type="button" data-export-csv>ส่งออก CSV</button>
-          <button type="button" data-clear-data>ล้างข้อมูลทั้งหมด</button>
-          <button type="button" data-open-budget>ตั้งงบประมาณ</button>
-          <button type="button" data-open-recurring>เพิ่มรายจ่ายประจำ</button>
-          <button type="button" data-open-sync>ซิงก์ Google Sheets</button>
-          <button type="button" data-nav="records">ดูรายการทั้งหมด</button>
-          <button type="button" data-nav="analysis">ดูรายงาน</button>
+          <button type="button" data-open-recurring><span class="action-ic"><svg class="svg-icon"><use href="#i-repeat"></use></svg></span>เพิ่มรายจ่ายประจำ</button>
+          <button type="button" data-open-budget><span class="action-ic"><svg class="svg-icon"><use href="#i-budget"></use></svg></span>ตั้งงบประมาณ</button>
+          <button type="button" data-nav="records"><span class="action-ic"><svg class="svg-icon"><use href="#i-list"></use></svg></span>ดูรายการทั้งหมด</button>
+          <button type="button" data-nav="analysis"><span class="action-ic"><svg class="svg-icon"><use href="#i-chart"></use></svg></span>ดูรายงาน</button>
+          <button type="button" data-open-sync><span class="action-ic"><svg class="svg-icon"><use href="#i-cloud"></use></svg></span>ซิงก์ Google Sheets</button>
+          <button type="button" data-export-csv><span class="action-ic"><svg class="svg-icon"><use href="#i-download"></use></svg></span>ส่งออก CSV</button>
+          <button type="button" class="action-danger" data-clear-data><span class="action-ic"><svg class="svg-icon"><use href="#i-trash"></use></svg></span>ล้างข้อมูลทั้งหมด</button>
         </div>
       </div>
     </div>
@@ -575,6 +575,6 @@
         </form>
       </div>
     </div>
-    <script src="app.js?v=40"></script>
+    <script src="app.js?v=41"></script>
   </body>
 </html>
