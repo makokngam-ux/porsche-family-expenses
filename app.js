@@ -124,8 +124,12 @@ function loadRecurring() {
   }
 }
 
+// ลิงก์ Google Apps Script Web App เริ่มต้น (ฝังไว้ให้ทุกเครื่องใช้ได้เลย ไม่ต้องกรอกเอง)
+const DEFAULT_SYNC_ENDPOINT =
+  "https://script.google.com/macros/s/AKfycbyMfOvzJL56lBaO1qzLNGRgjPyN4O2ZqwkQt9eMGRISj_6nm35mklvDeLUQStwvF5OBQw/exec";
+
 function loadSyncEndpoint() {
-  return localStorage.getItem(syncEndpointStorageKey) || "";
+  return localStorage.getItem(syncEndpointStorageKey) || DEFAULT_SYNC_ENDPOINT;
 }
 
 function saveExpenses() {
