@@ -1289,6 +1289,8 @@ document.querySelectorAll("[data-close-panels]").forEach((button) => {
 document.body.addEventListener("click", (event) => {
   const deleteButton = event.target.closest("[data-delete-id]");
   if (deleteButton) {
+    const exp = state.expenses.find((item) => String(item.id) === deleteButton.dataset.deleteId);
+    if (!window.confirm(`ต้องการลบรายการ "${exp ? exp.title : ""}" ใช่ไหม?`)) return;
     state.expenses = state.expenses.filter((item) => String(item.id) !== deleteButton.dataset.deleteId);
     saveExpenses();
     renderAll();
@@ -1338,7 +1340,10 @@ document.body.addEventListener("click", (event) => {
 
   const recurringDeleteButton = event.target.closest("[data-delete-recurring]");
   if (recurringDeleteButton) {
-    state.recurring = state.recurring.filter((item) => String(item.id) !== recurringDeleteButton.dataset.deleteRecurring);
+    const id = recurringDeleteButton.dataset.deleteRecurring;
+    const bill = (state.recurring || []).find((item) => String(item.id) === id);
+    if (!window.confirm(`ต้องการลบรายจ่ายประจำ "${bill ? bill.title : ""}" ใช่ไหม?`)) return;
+    state.recurring = state.recurring.filter((item) => String(item.id) !== id);
     saveRecurring();
     renderAll();
   }
@@ -1357,7 +1362,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=29").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=30").catch(() => {});
 }
 
 setView(location.hash.replace("#", "") || "home");
