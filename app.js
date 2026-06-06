@@ -11,6 +11,9 @@ const categories = {
   shop: { label: "ช้อปปิ้ง / ของใช้", icon: "i-bag", color: "#cbb6f2", group: "lifestyle" },
   education: { label: "การศึกษา", icon: "i-grad", color: "#ffd978", group: "education" },
   health: { label: "สุขภาพ", icon: "i-health", color: "#8de0c4", group: "health" },
+  car: { label: "รถยนต์", icon: "i-steering", color: "#8fcdee", group: "daily" },
+  subscription: { label: "ค่าสมาชิก / แอป", icon: "i-apps", color: "#a9a0ef", group: "lifestyle" },
+  installment: { label: "ผ่อนชำระ", icon: "i-card", color: "#ffb38a", group: "daily" },
   other: { label: "อื่นๆ", icon: "i-more", color: "#dcd6ed", group: "daily" },
 };
 
