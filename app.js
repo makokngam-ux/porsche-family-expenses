@@ -548,7 +548,11 @@ function renderRecurring() {
           const category = categories[item.category] || categories.other;
           const remain = monthsRemaining(item.id);
           let note = `${category.label} · ทุกวันที่ ${item.day}`;
-          if (remain !== null) note += installmentEnded(item.id) ? " · ผ่อนครบแล้ว ✓" : ` · เหลืออีก ${remain} งวด`;
+          if (remain !== null) {
+            note += installmentEnded(item.id)
+              ? " · ผ่อนครบแล้ว ✓"
+              : ` · เหลือ ${remain} งวด (คงเหลือ ฿${shortMoney.format(remain * Number(item.amount || 0))})`;
+          }
           return `<li>
     <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
             <b>${item.title}<small>${note}</small></b>
@@ -1353,7 +1357,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=28").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=29").catch(() => {});
 }
 
 setView(location.hash.replace("#", "") || "home");
