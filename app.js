@@ -785,13 +785,13 @@ function endpointWithParams(endpoint, params) {
   return `${endpoint}${joiner}${new URLSearchParams(params).toString()}`;
 }
 
-function loadFromSheet(endpoint) {
+function requestSheetAction(endpoint, params) {
   return new Promise((resolve, reject) => {
     const callbackName = `porscheSheetSync${Date.now()}${Math.floor(Math.random() * 1000)}`;
     const script = document.createElement("script");
     const timer = window.setTimeout(() => {
       cleanup();
-      reject(new Error("โหลดข้อมูลช้าเกินไป"));
+      reject(new Error("เชื่อมต่อ Google Sheets ช้าเกินไป"));
     }, 15000);
 
     function cleanup() {
@@ -803,19 +803,24 @@ function loadFromSheet(endpoint) {
     window[callbackName] = (payload) => {
       cleanup();
       if (payload?.ok === false) {
-        reject(new Error(payload.error || "โหลดข้อมูลไม่สำเร็จ"));
+        reject(new Error(payload.error || "ซิงก์ข้อมูลไม่สำเร็จ"));
         return;
       }
-      resolve(normalizeRemoteData(payload));
+      resolve(payload);
     };
 
     script.onerror = () => {
       cleanup();
       reject(new Error("เชื่อมต่อ Apps Script ไม่ได้"));
     };
-    script.src = endpointWithParams(endpoint, { action: "loadAll", callback: callbackName, t: Date.now() });
+    script.src = endpointWithParams(endpoint, { ...params, callback: callbackName, t: Date.now() });
     document.body.appendChild(script);
   });
+}
+
+async function loadFromSheet(endpoint) {
+  const payload = await requestSheetAction(endpoint, { action: "loadAll" });
+  return normalizeRemoteData(payload);
 }
 
 async function syncFromSheet() {
@@ -846,15 +851,16 @@ async function syncToSheet({ silent = false } = {}) {
   if (!silent) setSyncStatus("กำลังบันทึกขึ้น Google Sheets...");
 
   try {
-    await fetch(state.syncEndpoint, {
-      method: "POST",
-      mode: "no-cors",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "saveAll", data: syncPayload() }),
+    const payload = await requestSheetAction(state.syncEndpoint, {
+      action: "saveAll",
+      payload: JSON.stringify(syncPayload()),
     });
-    if (!silent) setSyncStatus("ส่งข้อมูลไป Google Sheets แล้ว", "good");
-  } catch {
-    if (!silent) setSyncStatus("บันทึกขึ้น Google Sheets ไม่สำเร็จ", "error");
+    if (!silent) {
+      const updatedAt = payload?.updatedAt ? ` (${new Date(payload.updatedAt).toLocaleString("th-TH")})` : "";
+      setSyncStatus(`ส่งข้อมูลไป Google Sheets แล้ว${updatedAt}`, "good");
+    }
+  } catch (error) {
+    if (!silent) setSyncStatus(error.message || "บันทึกขึ้น Google Sheets ไม่สำเร็จ", "error");
   }
 }
 

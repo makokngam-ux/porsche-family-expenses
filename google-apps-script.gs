@@ -14,11 +14,28 @@ const HEADERS = {
 
 function doGet(event) {
   const action = event.parameter.action || "loadAll";
-  if (action !== "loadAll") {
-    return output_(event, { ok: false, error: "Unknown action" });
+  if (action === "loadAll") {
+    return output_(event, { ok: true, data: loadAll_() });
   }
 
-  return output_(event, { ok: true, data: loadAll_() });
+  if (action === "saveAll") {
+    try {
+      const data = JSON.parse(event.parameter.payload || "{}");
+      const lock = LockService.getScriptLock();
+      lock.waitLock(10000);
+      try {
+        saveAll_(data);
+      } finally {
+        lock.releaseLock();
+      }
+
+      return output_(event, { ok: true, updatedAt: new Date().toISOString() });
+    } catch (error) {
+      return output_(event, { ok: false, error: error.message });
+    }
+  }
+
+  return output_(event, { ok: false, error: "Unknown action" });
 }
 
 function doPost(event) {
