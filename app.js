@@ -218,8 +218,18 @@ function percent(value, total) {
   return Math.round((value / total) * 100);
 }
 
+// แปลงค่าวันที่ให้เป็นรูปแบบ YYYY-MM-DD เสมอ (รองรับกรณี Google Sheet คืนค่าเป็น ISO timestamp เต็ม)
+function toISODate(value) {
+  if (!value) return "";
+  const s = String(value);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s.slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function formatDate(value) {
-  const date = new Date(`${value}T00:00:00`);
+  const date = new Date(`${toISODate(value)}T00:00:00`);
   const today = new Date();
   const sameDay =
     date.getFullYear() === today.getFullYear() &&
@@ -794,7 +804,10 @@ function syncPayload() {
 function normalizeRemoteData(payload) {
   const data = payload?.data || payload || {};
   return {
-    expenses: Array.isArray(data.expenses) ? data.expenses : [],
+    expenses: (Array.isArray(data.expenses) ? data.expenses : []).map((item) => ({
+      ...item,
+      date: toISODate(item.date),
+    })),
     budget: data.budget && typeof data.budget === "object" ? data.budget : clone(defaultBudget),
     recurring: Array.isArray(data.recurring) ? data.recurring : [],
     updatedAt: data.updatedAt || payload?.updatedAt || "",
