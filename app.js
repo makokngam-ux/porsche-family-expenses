@@ -905,9 +905,10 @@ async function syncFromSheet() {
   setSyncStatus("กำลังโหลดข้อมูลจาก Google Sheets...");
   try {
     const data = await loadFromSheet(state.syncEndpoint);
-    state.expenses = data.expenses.length ? data.expenses : state.expenses;
+    // โหลดสำเร็จ → ใช้ข้อมูลจากชีตเป็นหลักเสมอ (แม้ว่างเปล่า) เพื่อให้การลบ/ล้างซิงก์ข้ามเครื่องได้
+    state.expenses = Array.isArray(data.expenses) ? data.expenses : state.expenses;
     state.budget = data.budget || state.budget;
-    state.recurring = data.recurring || state.recurring;
+    state.recurring = Array.isArray(data.recurring) ? data.recurring : state.recurring;
     const newest = state.expenses.map((item) => item.date).sort().at(-1);
     if (newest) state.month = monthOf(newest);
     saveLocalSnapshot();
@@ -1235,7 +1236,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=25").catch(() => {});
 }
 
 setView(location.hash.replace("#", "") || "home");
