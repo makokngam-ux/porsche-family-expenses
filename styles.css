@@ -1449,11 +1449,21 @@ select:focus {
     border: 0;
     border-radius: 0;
     box-shadow: none;
+    /* เผื่อที่ว่างด้านล่างให้แถบเมนูที่ค้างอยู่ ไม่บังเนื้อหา */
+    padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
   }
 
   /* บนมือถือ ให้พื้นหลังนอกแอป (รวมพื้นที่ขอบบน/safe-area) เป็นสีเดียวกับหัวแอป ไม่ให้มีแถบสีแปลกโผล่ */
   body {
     background: #fffdfd;
+  }
+
+  /* แถบเมนูล่างค้างอยู่กับที่ ไม่เลื่อนตามเนื้อหา */
+  .bottom-nav {
+    position: fixed;
+    z-index: 15;
+    height: auto;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
 
   .quick-grid {
