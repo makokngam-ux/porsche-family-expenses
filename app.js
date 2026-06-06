@@ -211,29 +211,55 @@ function realMonthlyExpenses() {
   return realForMonth(state.month);
 }
 
-// รวมรายจ่ายประจำเข้าไปด้วย — ใช้กับยอดรวม/โดนัท/หมวด/งบ
+// นับเฉพาะรายการที่บันทึกจริงเท่านั้น (รายจ่ายประจำต้องกด "บันทึก" ก่อนถึงจะถูกนับ)
 function monthlyExpenses() {
-  return [...realForMonth(state.month), ...recurringVirtualForMonth(state.month)];
+  return realForMonth(state.month);
 }
 
 function selectedExpenses() {
   if (state.period === "year") {
-    const year = state.month.slice(0, 4);
-    const real = state.expenses.filter((item) => monthOf(item.date).slice(0, 4) === year);
-    const virtual = [];
-    for (let m = 1; m <= 12; m += 1) {
-      virtual.push(...recurringVirtualForMonth(`${year}-${String(m).padStart(2, "0")}`));
-    }
-    return [...real, ...virtual];
+    return state.expenses.filter((item) => monthOf(item.date).slice(0, 4) === state.month.slice(0, 4));
   }
 
   if (state.period === "day") {
-    const base = monthlyExpenses();
-    const latestDate = sortedByDate(base)[0]?.date;
-    return latestDate ? base.filter((item) => item.date === latestDate) : [];
+    const latestDate = sortedByDate(realForMonth(state.month))[0]?.date;
+    return latestDate ? state.expenses.filter((item) => item.date === latestDate) : [];
   }
 
   return monthlyExpenses();
+}
+
+// รายจ่ายประจำที่ใกล้ครบกำหนด (ภายใน 2 วัน) และยังไม่ได้บันทึกในเดือนนี้ → เด้งเตือนในรายจ่ายล่าสุด
+function dueSoonRecurring() {
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = today.getMonth();
+  const monthKey = `${y}-${String(m + 1).padStart(2, "0")}`;
+  const last = daysInMonth(monthKey);
+  const todayMid = new Date(y, m, today.getDate());
+  return (state.recurring || [])
+    .filter((r) => {
+      const day = Math.min(Number(r.day) || 1, last);
+      const diff = Math.round((new Date(y, m, day) - todayMid) / 86400000);
+      const postedThisMonth = state.expenses.some((e) => e.recurringId === r.id && monthOf(e.date) === monthKey);
+      return diff >= 0 && diff <= 2 && !postedThisMonth;
+    })
+    .sort((a, b) => (Number(a.day) || 1) - (Number(b.day) || 1));
+}
+
+function dueReminderMarkup(item) {
+  const category = categories[item.category] || categories.other;
+  const today = new Date();
+  const last = daysInMonth(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
+  const day = Math.min(Number(item.day) || 1, last);
+  const diff = Math.round((new Date(today.getFullYear(), today.getMonth(), day) - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
+  const when = diff <= 0 ? "ครบกำหนดวันนี้" : diff === 1 ? "ครบกำหนดพรุ่งนี้" : `ครบกำหนดในอีก ${diff} วัน`;
+  return `<li class="due-reminder">
+    <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
+    <b>${item.title}<small>⏰ ${when} · วันที่ ${day}</small></b>
+    <strong>฿ ${money.format(item.amount)}</strong>
+    <button class="small-pill" type="button" data-post-recurring="${item.id}">บันทึก</button>
+  </li>`;
 }
 
 // ตัวกรองสำหรับลิสต์ "รายการทั้งหมด" — แสดงเฉพาะรายการจริง ไม่รวมรายจ่ายประจำ
@@ -465,7 +491,7 @@ function renderRecurring() {
     <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
             <b>${item.title}<small>${category.label} · ทุกวันที่ ${item.day}</small></b>
             <strong>฿ ${money.format(item.amount)}</strong>
-            <span class="small-pill auto-pill" title="นับเข้ายอดอัตโนมัติทุกเดือน">อัตโนมัติ</span>
+            <button class="small-pill" type="button" data-post-recurring="${item.id}" ${posted ? "disabled" : ""}>${posted ? "บันทึกแล้ว" : "บันทึก"}</button>
             <button class="delete-expense" type="button" data-delete-recurring="${item.id}" aria-label="ลบ ${item.title}">${iconMarkup("i-trash")}</button>
           </li>`;
         })
@@ -567,10 +593,10 @@ function sortedByDate(items) {
 function renderTransactions() {
   const recent = document.querySelector("[data-transaction-list]");
   if (recent) {
+    const reminders = dueSoonRecurring().map(dueReminderMarkup).join("");
     const items = sortedByDate(realMonthlyExpenses()).slice(0, 7);
-    recent.innerHTML = items.length
-      ? items.map((item) => transactionMarkup(item)).join("")
-      : `<li class="empty-row"><b>ยังไม่มีรายการในเดือนนี้</b></li>`;
+    const body = items.map((item) => transactionMarkup(item)).join("");
+    recent.innerHTML = reminders + body || `<li class="empty-row"><b>ยังไม่มีรายการในเดือนนี้</b></li>`;
   }
 
   const full = document.querySelector("[data-full-transaction-list]");
@@ -601,7 +627,7 @@ function trendData() {
     rows.push({
       key,
       label: date.toLocaleDateString("th-TH", { month: "short" }).replace(".", ""),
-      total: sum([...state.expenses.filter((item) => monthOf(item.date) === key), ...recurringVirtualForMonth(key)]),
+      total: sum(state.expenses.filter((item) => monthOf(item.date) === key)),
     });
   }
   return rows;
@@ -1235,7 +1261,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=26").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=27").catch(() => {});
 }
 
 setView(location.hash.replace("#", "") || "home");

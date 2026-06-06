@@ -1410,3 +1410,19 @@ select:focus {
     font-size: 11px;
   }
 }
+
+/* งบรายเดือนแสดงแบบจางๆ เป็นเป้าอ้างอิง */
+[data-budget-text] {
+  color: #c2b2b9;
+  font-weight: 600;
+}
+
+/* แจ้งเตือนรายจ่ายประจำที่ใกล้ครบกำหนด (ในรายจ่ายล่าสุด) */
+.due-reminder {
+  background: rgba(255, 220, 121, 0.16);
+  border-radius: 14px;
+}
+.due-reminder small {
+  color: #d9892b;
+  font-weight: 700;
+}
