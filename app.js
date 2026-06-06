@@ -183,25 +183,63 @@ function monthOf(date) {
   return String(date).slice(0, 7);
 }
 
+function daysInMonth(monthKey) {
+  const [y, m] = monthKey.split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+}
+
+// แปลง "รายจ่ายประจำ" เป็นรายการเสมือนของเดือนนั้น เพื่อให้ถูกนับในยอดรวม/กราฟอัตโนมัติ
+function recurringVirtualForMonth(monthKey) {
+  if (!Array.isArray(state.recurring)) return [];
+  const last = daysInMonth(monthKey);
+  return state.recurring.map((r) => ({
+    id: `rec_${r.id}_${monthKey}`,
+    recurringId: r.id,
+    title: r.title,
+    category: r.category,
+    amount: Number(r.amount || 0),
+    date: `${monthKey}-${String(Math.min(Number(r.day) || 1, last)).padStart(2, "0")}`,
+    recurringVirtual: true,
+  }));
+}
+
+function realForMonth(monthKey) {
+  return state.expenses.filter((item) => monthOf(item.date) === monthKey);
+}
+
+// รายการจริงที่บันทึกเอง (ไม่รวมรายจ่ายประจำ) — ใช้กับลิสต์ "รายการทั้งหมด" และ "รายการล่าสุด"
+function realMonthlyExpenses() {
+  return realForMonth(state.month);
+}
+
+// รวมรายจ่ายประจำเข้าไปด้วย — ใช้กับยอดรวม/โดนัท/หมวด/งบ
+function monthlyExpenses() {
+  return [...realForMonth(state.month), ...recurringVirtualForMonth(state.month)];
+}
+
 function selectedExpenses() {
   if (state.period === "year") {
-    return state.expenses.filter((item) => monthOf(item.date).slice(0, 4) === state.month.slice(0, 4));
+    const year = state.month.slice(0, 4);
+    const real = state.expenses.filter((item) => monthOf(item.date).slice(0, 4) === year);
+    const virtual = [];
+    for (let m = 1; m <= 12; m += 1) {
+      virtual.push(...recurringVirtualForMonth(`${year}-${String(m).padStart(2, "0")}`));
+    }
+    return [...real, ...virtual];
   }
 
   if (state.period === "day") {
-    const latestDate = monthlyExpenses()[0]?.date;
-    return latestDate ? state.expenses.filter((item) => item.date === latestDate) : [];
+    const base = monthlyExpenses();
+    const latestDate = sortedByDate(base)[0]?.date;
+    return latestDate ? base.filter((item) => item.date === latestDate) : [];
   }
 
   return monthlyExpenses();
 }
 
-function monthlyExpenses() {
-  return state.expenses.filter((item) => monthOf(item.date) === state.month);
-}
-
+// ตัวกรองสำหรับลิสต์ "รายการทั้งหมด" — แสดงเฉพาะรายการจริง ไม่รวมรายจ่ายประจำ
 function filteredExpenses() {
-  const base = monthlyExpenses();
+  const base = realMonthlyExpenses();
   if (state.categoryFilter === "all") return base;
   return base.filter((item) => item.category === state.categoryFilter);
 }
@@ -428,7 +466,7 @@ function renderRecurring() {
     <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
             <b>${item.title}<small>${category.label} · ทุกวันที่ ${item.day}</small></b>
             <strong>฿ ${money.format(item.amount)}</strong>
-            <button class="small-pill" type="button" data-post-recurring="${item.id}" ${posted ? "disabled" : ""}>${posted ? "แล้ว" : "บันทึก"}</button>
+            <span class="small-pill auto-pill" title="นับเข้ายอดอัตโนมัติทุกเดือน">อัตโนมัติ</span>
             <button class="delete-expense" type="button" data-delete-recurring="${item.id}" aria-label="ลบ ${item.title}">${iconMarkup("i-trash")}</button>
           </li>`;
         })
@@ -530,7 +568,7 @@ function sortedByDate(items) {
 function renderTransactions() {
   const recent = document.querySelector("[data-transaction-list]");
   if (recent) {
-    const items = sortedByDate(selectedExpenses()).slice(0, 7);
+    const items = sortedByDate(realMonthlyExpenses()).slice(0, 7);
     recent.innerHTML = items.length
       ? items.map((item) => transactionMarkup(item)).join("")
       : `<li class="empty-row"><b>ยังไม่มีรายการในเดือนนี้</b></li>`;
@@ -564,7 +602,7 @@ function trendData() {
     rows.push({
       key,
       label: date.toLocaleDateString("th-TH", { month: "short" }).replace(".", ""),
-      total: sum(state.expenses.filter((item) => monthOf(item.date) === key)),
+      total: sum([...state.expenses.filter((item) => monthOf(item.date) === key), ...recurringVirtualForMonth(key)]),
     });
   }
   return rows;
