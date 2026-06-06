@@ -511,7 +511,7 @@ function renderCategoryViews() {
       ? monthVisible
           .map(
             (item) =>
-              `<li>${iconBadge(item.key)}<b>${item.label}</b><em>${percent(item.total, monthTotal)}%</em></li>`,
+              `<li class="cat-row" data-cat-jump="${item.key}" role="button" tabindex="0">${iconBadge(item.key)}<b>${item.label}</b><em>${percent(item.total, monthTotal)}%</em></li>`,
           )
           .join("")
       : `<li><span class="category-icon">${iconMarkup("i-more")}</span><b>ยังไม่มีข้อมูล</b><em>0%</em></li>`;
@@ -532,7 +532,7 @@ function renderCategoryViews() {
           .sort((a, b) => b.total - a.total)
           .map(
             (item) =>
-              `<li>${iconBadge(item.key)}<b>${item.label}</b><em>${percent(item.total, total)}%</em><strong>฿ ${money.format(item.total)}</strong><i>›</i></li>`,
+              `<li class="cat-row" data-cat-jump="${item.key}" role="button" tabindex="0">${iconBadge(item.key)}<b>${item.label}</b><em>${percent(item.total, total)}%</em><strong>฿ ${money.format(item.total)}</strong><i>›</i></li>`,
           )
           .join("")
       : `<li class="empty-row"><b>ยังไม่มีรายจ่ายในช่วงนี้</b></li>`;
@@ -550,6 +550,8 @@ function renderCategoryViews() {
       const span = document.createElement("span");
       span.className = "chart-label";
       span.dataset.category = item.key;
+      span.dataset.catJump = item.key;
+      span.setAttribute("role", "button");
       span.style.left = `${Math.round(x - 46)}px`;
       span.style.top = `${Math.round(y - 30)}px`;
       span.style.setProperty("--cat-color", item.color);
@@ -1296,6 +1298,30 @@ document.querySelector("[data-category-filter]")?.addEventListener("change", (ev
   renderTransactions();
 });
 
+// drill-down: แตะหมวด (โดนัท/รายการหมวด) → ไปหน้าบันทึกรายจ่าย พร้อมกรองเฉพาะหมวดนั้น
+function jumpToCategory(key) {
+  if (!key) return;
+  state.categoryFilter = key;
+  const sel = document.querySelector("[data-category-filter]");
+  if (sel) sel.value = key;
+  setView("records");
+  renderAll();
+}
+
+document.body.addEventListener("click", (event) => {
+  const catEl = event.target.closest("[data-cat-jump]");
+  if (catEl) jumpToCategory(catEl.dataset.catJump);
+});
+
+document.body.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const catEl = event.target.closest("[data-cat-jump]");
+  if (catEl) {
+    event.preventDefault();
+    jumpToCategory(catEl.dataset.catJump);
+  }
+});
+
 document.querySelectorAll("[data-period]").forEach((button) => {
   button.addEventListener("click", () => {
     state.period = button.dataset.period;
@@ -1523,7 +1549,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=41").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=42").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {

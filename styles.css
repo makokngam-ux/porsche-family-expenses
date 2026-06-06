@@ -808,6 +808,25 @@ small {
   appearance: none;
 }
 
+/* หมวดที่แตะเจาะดูรายการได้ (drill-down) */
+.cat-row {
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+  border-radius: 12px;
+}
+
+.cat-row:hover {
+  background: rgba(255, 240, 245, 0.7);
+}
+
+.cat-row:active {
+  transform: scale(0.99);
+}
+
+.chart-label[data-cat-jump] {
+  cursor: pointer;
+}
+
 .records-total {
   margin-top: 0;
 }
