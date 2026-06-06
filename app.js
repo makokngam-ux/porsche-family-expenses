@@ -70,12 +70,17 @@ const shortMoney = new Intl.NumberFormat("th-TH", {
   maximumFractionDigits: 0,
 });
 
+function currentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
 let state = {
   expenses: loadExpenses(),
   budget: loadBudget(),
   recurring: loadRecurring(),
   syncEndpoint: loadSyncEndpoint(),
-  month: "2024-05",
+  month: currentMonthKey(),
   categoryFilter: "all",
   period: "month",
   view: "home",
