@@ -8,7 +8,7 @@ const SHEET_NAMES = {
 const HEADERS = {
   expenses: ["id", "title", "category", "amount", "date", "recurringId"],
   budget: ["key", "amount"],
-  recurring: ["id", "title", "category", "amount", "day"],
+  recurring: ["id", "title", "category", "amount", "day", "freq", "month", "end"],
   meta: ["key", "value"],
 };
 
@@ -86,6 +86,9 @@ function saveAll_(data) {
     item.category || "other",
     Number(item.amount || 0),
     Number(item.day || 1),
+    item.freq || "monthly",
+    item.month || "",
+    item.end || "",
   ]));
 
   writeRows_("meta", [["updatedAt", updatedAt]]);
@@ -129,6 +132,9 @@ function loadAll_() {
       category: row[2] || "other",
       amount: Number(row[3] || 0),
       day: Number(row[4] || 1),
+      freq: row[5] || "monthly",
+      month: row[6] ? Number(row[6]) : null,
+      end: row[7] || "",
     })).filter((item) => item.title),
   };
 }

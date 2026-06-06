@@ -350,6 +350,7 @@
         <section class="panel recurring-panel">
           <div class="panel-title">
             <h2>รายจ่ายประจำปี <span class="head-sum" data-yearly-total></span></h2>
+            <a href="#recurring" data-open-recurring-yearly>เพิ่มบิล ›</a>
           </div>
           <ul class="recurring-list" data-yearly-list></ul>
         </section>
@@ -474,6 +475,14 @@
           <button class="close-modal" type="button" aria-label="ปิด">×</button>
         </div>
         <form data-recurring-form>
+          <input type="hidden" name="editId" />
+          <label>
+            ความถี่
+            <select name="freq">
+              <option value="monthly">รายเดือน</option>
+              <option value="yearly">รายปี</option>
+            </select>
+          </label>
           <label>
             ชื่อรายการ
             <input name="title" type="text" placeholder="เช่น ค่าน้ำ ค่าไฟ ค่าอินเทอร์เน็ต" required />
@@ -496,8 +505,29 @@
           </label>
           <div class="form-row">
             <label>จำนวนเงิน<input name="amount" type="number" min="0" step="0.01" inputmode="decimal" required /></label>
-            <label>ครบกำหนดทุกวันที่<input name="day" type="number" min="1" max="31" step="1" required /></label>
+            <label>ครบกำหนดวันที่<input name="day" type="number" min="1" max="31" step="1" required /></label>
           </div>
+          <label data-recur-month-wrap hidden>
+            เดือนที่ครบกำหนด (รายปี)
+            <select name="month">
+              <option value="1">มกราคม</option>
+              <option value="2">กุมภาพันธ์</option>
+              <option value="3">มีนาคม</option>
+              <option value="4">เมษายน</option>
+              <option value="5">พฤษภาคม</option>
+              <option value="6">มิถุนายน</option>
+              <option value="7">กรกฎาคม</option>
+              <option value="8">สิงหาคม</option>
+              <option value="9">กันยายน</option>
+              <option value="10">ตุลาคม</option>
+              <option value="11">พฤศจิกายน</option>
+              <option value="12">ธันวาคม</option>
+            </select>
+          </label>
+          <label data-recur-end-wrap>
+            วันผ่อนครบ (ถ้าเป็นการผ่อน — เว้นว่างได้)
+            <input name="end" type="month" />
+          </label>
           <div class="form-actions">
             <button class="ghost-button" type="button" data-close-panels>ยกเลิก</button>
             <button class="save-button" type="submit">บันทึกบิลประจำ</button>
@@ -545,6 +575,6 @@
         </form>
       </div>
     </div>
-    <script src="app.js?v=35"></script>
+    <script src="app.js?v=36"></script>
   </body>
 </html>

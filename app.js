@@ -246,9 +246,17 @@ function selectedExpenses() {
 
 const THAI_MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
 
-// ผ่อนครบหรือยัง (เลยเดือนที่ผ่อนครบ)
-function installmentEnded(recurringId) {
-  const end = INSTALLMENT_END[recurringId];
+function monthlyBills() {
+  return (state.recurring || []).filter((r) => (r.freq || "monthly") !== "yearly");
+}
+
+function yearlyBills() {
+  return (state.recurring || []).filter((r) => r.freq === "yearly");
+}
+
+// ผ่อนครบหรือยัง (เลยเดือนที่ผ่อนครบ) — ใช้ฟิลด์ end (YYYY-MM) ของรายการ
+function installmentEnded(item) {
+  const end = item && item.end;
   if (!end) return false;
   const today = new Date();
   const cur = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
@@ -256,11 +264,12 @@ function installmentEnded(recurringId) {
 }
 
 // เหลืออีกกี่งวด (นับรวมเดือนปัจจุบันถึงเดือนผ่อนครบ)
-function monthsRemaining(recurringId) {
-  const end = INSTALLMENT_END[recurringId];
+function monthsRemaining(item) {
+  const end = item && item.end;
   if (!end) return null;
   const today = new Date();
-  const [ey, em] = end.split("-").map(Number);
+  const [ey, em] = String(end).split("-").map(Number);
+  if (!ey || !em) return null;
   return Math.max(0, (ey - today.getFullYear()) * 12 + (em - (today.getMonth() + 1)) + 1);
 }
 
@@ -272,9 +281,9 @@ function dueSoonRecurring() {
   const monthKey = `${y}-${String(m + 1).padStart(2, "0")}`;
   const last = daysInMonth(monthKey);
   const todayMid = new Date(y, m, today.getDate());
-  return (state.recurring || [])
+  return monthlyBills()
     .filter((r) => {
-      if (installmentEnded(r.id)) return false;
+      if (installmentEnded(r)) return false;
       const day = Math.min(Number(r.day) || 1, last);
       const diff = Math.round((new Date(y, m, day) - todayMid) / 86400000);
       const postedThisMonth = state.expenses.some((e) => e.recurringId === r.id && monthOf(e.date) === monthKey);
@@ -292,8 +301,9 @@ function yearlyDueSoon() {
   const today = new Date();
   const y = today.getFullYear();
   const todayMid = new Date(y, today.getMonth(), today.getDate());
-  return YEARLY_BILLS.filter((b) => {
-    const diff = Math.round((new Date(y, b.month - 1, b.day) - todayMid) / 86400000);
+  return yearlyBills().filter((b) => {
+    if (!b.month) return false;
+    const diff = Math.round((new Date(y, b.month - 1, b.day || 1) - todayMid) / 86400000);
     return diff <= 2 && diff >= -31 && !yearlyPostedThisYear(b.id, y);
   });
 }
@@ -543,16 +553,15 @@ function renderRecurring() {
   const list = document.querySelector("[data-recurring-list]");
   if (!list) return;
 
-  list.innerHTML = state.recurring.length
-    ? state.recurring
-        .slice()
-        .sort((a, b) => Number(a.day) - Number(b.day))
+  const bills = monthlyBills().slice().sort((a, b) => Number(a.day) - Number(b.day));
+  list.innerHTML = bills.length
+    ? bills
         .map((item) => {
           const category = categories[item.category] || categories.other;
-          const remain = monthsRemaining(item.id);
+          const remain = monthsRemaining(item);
           let note = `${category.label} · ทุกวันที่ ${item.day}`;
           if (remain !== null) {
-            note += installmentEnded(item.id)
+            note += installmentEnded(item)
               ? " · ผ่อนครบแล้ว ✓"
               : ` · เหลือ ${remain} งวด (คงเหลือ ฿${shortMoney.format(remain * Number(item.amount || 0))})`;
           }
@@ -560,17 +569,18 @@ function renderRecurring() {
     <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
             <b>${item.title}<small>${note}</small></b>
             <strong>฿ ${money.format(item.amount)}</strong>
+            <button class="edit-expense" type="button" data-edit-recurring="${item.id}" aria-label="แก้ไข ${item.title}">${iconMarkup("i-edit")}</button>
             <button class="delete-expense" type="button" data-delete-recurring="${item.id}" aria-label="ลบ ${item.title}">${iconMarkup("i-trash")}</button>
           </li>`;
         })
         .join("")
     : `<li class="empty-row"><b>ยังไม่มีรายจ่ายประจำ</b></li>`;
 
-  const monthlyTotal = (state.recurring || [])
-    .filter((r) => !installmentEnded(r.id))
+  const monthlyTotal = monthlyBills()
+    .filter((r) => !installmentEnded(r))
     .reduce((s, r) => s + Number(r.amount || 0), 0);
   document.querySelectorAll("[data-recurring-total]").forEach((el) => {
-    el.textContent = state.recurring.length ? `รวม ฿${shortMoney.format(monthlyTotal)}/เดือน` : "";
+    el.textContent = bills.length ? `รวม ฿${shortMoney.format(monthlyTotal)}/เดือน` : "";
   });
 }
 
@@ -817,20 +827,27 @@ function renderDailyChart() {
 function renderYearly() {
   const list = document.querySelector("[data-yearly-list]");
   if (!list) return;
-  const year = new Date().getFullYear();
-  list.innerHTML = YEARLY_BILLS.map((item) => {
-    const category = categories[item.category] || categories.other;
-    const paid = yearlyPostedThisYear(item.id, year);
-    return `<li>
+  const bills = yearlyBills()
+    .slice()
+    .sort((a, b) => (Number(a.month) || 0) - (Number(b.month) || 0) || (Number(a.day) || 0) - (Number(b.day) || 0));
+  list.innerHTML = bills.length
+    ? bills
+        .map((item) => {
+          const category = categories[item.category] || categories.other;
+          const due = item.month ? `${item.day || 1} ${THAI_MONTHS[item.month - 1]}` : "-";
+          return `<li>
       <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
-      <b>${item.title}<small>${category.label} · ครบกำหนด ${item.day} ${THAI_MONTHS[item.month - 1]} ทุกปี</small></b>
+      <b>${item.title}<small>${category.label} · ครบกำหนด ${due} ทุกปี</small></b>
       <strong>฿ ${money.format(item.amount)}</strong>
-      <button class="small-pill" type="button" data-post-recurring="${item.id}" ${paid ? "disabled" : ""}>${paid ? "บันทึกแล้ว" : "บันทึก"}</button>
+      <button class="edit-expense" type="button" data-edit-recurring="${item.id}" aria-label="แก้ไข ${item.title}">${iconMarkup("i-edit")}</button>
+      <button class="delete-expense" type="button" data-delete-recurring="${item.id}" aria-label="ลบ ${item.title}">${iconMarkup("i-trash")}</button>
     </li>`;
-  }).join("");
-  const yearlyTotal = YEARLY_BILLS.reduce((s, b) => s + Number(b.amount || 0), 0);
+        })
+        .join("")
+    : `<li class="empty-row"><b>ยังไม่มีรายจ่ายประจำปี</b></li>`;
+  const yearlyTotal = bills.reduce((s, b) => s + Number(b.amount || 0), 0);
   document.querySelectorAll("[data-yearly-total]").forEach((el) => {
-    el.textContent = `รวม ฿${shortMoney.format(yearlyTotal)}/ปี`;
+    el.textContent = bills.length ? `รวม ฿${shortMoney.format(yearlyTotal)}/ปี` : "";
   });
 }
 
@@ -897,13 +914,39 @@ function closeBudget() {
   modal?.setAttribute("aria-hidden", "true");
 }
 
-function openRecurring() {
+function updateRecurringFormMode() {
+  const form = document.querySelector("[data-recurring-form]");
+  if (!form) return;
+  const freq = form.elements.freq.value;
+  const monthWrap = form.querySelector("[data-recur-month-wrap]");
+  const endWrap = form.querySelector("[data-recur-end-wrap]");
+  if (monthWrap) monthWrap.hidden = freq !== "yearly";
+  if (endWrap) endWrap.hidden = freq === "yearly";
+}
+
+function openRecurring(opts = {}) {
   const modal = document.querySelector("[data-recurring-modal]");
   const form = document.querySelector("[data-recurring-form]");
-  form?.reset();
+  if (!form) return;
+  form.reset();
+  const item = opts.item || null;
+  const freq = item ? (item.freq || "monthly") : (opts.freq || "monthly");
+  form.elements.editId.value = item ? item.id : "";
+  form.elements.freq.value = freq;
+  if (item) {
+    form.elements.title.value = item.title || "";
+    form.elements.category.value = item.category || "other";
+    form.elements.amount.value = item.amount || "";
+    form.elements.day.value = item.day || "";
+    if (item.month) form.elements.month.value = item.month;
+    if (item.end) form.elements.end.value = item.end;
+  }
+  updateRecurringFormMode();
+  const titleEl = document.getElementById("recurring-title");
+  if (titleEl) titleEl.textContent = item ? "แก้ไขรายการประจำ" : freq === "yearly" ? "เพิ่มรายจ่ายประจำปี" : "เพิ่มรายจ่ายประจำเดือน";
   modal?.classList.add("open");
   modal?.setAttribute("aria-hidden", "false");
-  form?.elements.title.focus();
+  form.elements.title.focus();
 }
 
 function closeRecurring() {
@@ -1179,9 +1222,19 @@ document.querySelectorAll("[data-open-recurring]").forEach((button) => {
   button.addEventListener("click", (event) => {
     event.preventDefault();
     closeActions();
-    openRecurring();
+    openRecurring({ freq: "monthly" });
   });
 });
+
+document.querySelectorAll("[data-open-recurring-yearly]").forEach((button) => {
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    closeActions();
+    openRecurring({ freq: "yearly" });
+  });
+});
+
+document.querySelector("[data-recurring-form] [name='freq']")?.addEventListener("change", updateRecurringFormMode);
 
 document.querySelectorAll("[data-open-alerts]").forEach((button) => {
   button.addEventListener("click", (event) => {
@@ -1301,19 +1354,25 @@ document.querySelector("[data-recurring-form]")?.addEventListener("submit", (eve
   event.preventDefault();
   const form = event.currentTarget;
   const data = new FormData(form);
-  state.recurring = [
-    ...state.recurring,
-    {
-      id: Date.now(),
-      title: data.get("title").toString().trim(),
-      category: data.get("category"),
-      amount: Number(data.get("amount")),
-      day: Number(data.get("day")),
-    },
-  ];
+  const freq = data.get("freq") || "monthly";
+  const editId = data.get("editId");
+  const item = {
+    id: editId ? Number(editId) || editId : Date.now(),
+    title: data.get("title").toString().trim(),
+    category: data.get("category"),
+    amount: Number(data.get("amount")),
+    day: Number(data.get("day")) || 1,
+    freq,
+    month: freq === "yearly" ? Number(data.get("month")) || 1 : null,
+    end: freq === "yearly" ? "" : (data.get("end") || "").toString(),
+  };
+  if (editId) {
+    state.recurring = (state.recurring || []).map((r) => (String(r.id) === String(editId) ? item : r));
+  } else {
+    state.recurring = [...(state.recurring || []), item];
+  }
   saveRecurring();
   closeRecurring();
-  setView("records");
   renderAll();
 });
 
@@ -1377,33 +1436,38 @@ document.body.addEventListener("click", (event) => {
   if (postButton) {
     const id = postButton.dataset.postRecurring;
     const today = new Date();
-    const monthly = (state.recurring || []).find((bill) => String(bill.id) === id);
-    const yearly = YEARLY_BILLS.find((bill) => String(bill.id) === id);
+    const bill = (state.recurring || []).find((b) => String(b.id) === id);
+    if (!bill) return;
 
-    if (monthly) {
-      const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-      if (state.expenses.some((e) => e.recurringId === monthly.id && monthOf(e.date) === monthKey)) return;
-      const last = daysInMonth(monthKey);
-      const day = String(Math.min(Number(monthly.day) || 1, last)).padStart(2, "0");
-      state.expenses = [
-        { id: Date.now(), recurringId: monthly.id, title: monthly.title, category: monthly.category, amount: Number(monthly.amount), date: `${monthKey}-${day}` },
-        ...state.expenses,
-      ];
-    } else if (yearly) {
+    if (bill.freq === "yearly") {
       const yr = today.getFullYear();
-      if (yearlyPostedThisYear(yearly.id, yr)) return;
-      const date = `${yr}-${String(yearly.month).padStart(2, "0")}-${String(yearly.day).padStart(2, "0")}`;
+      if (!bill.month || yearlyPostedThisYear(bill.id, yr)) return;
+      const date = `${yr}-${String(bill.month).padStart(2, "0")}-${String(bill.day || 1).padStart(2, "0")}`;
       state.expenses = [
-        { id: Date.now(), recurringId: yearly.id, title: yearly.title, category: yearly.category, amount: Number(yearly.amount), date },
+        { id: Date.now(), recurringId: bill.id, title: bill.title, category: bill.category, amount: Number(bill.amount), date },
         ...state.expenses,
       ];
     } else {
-      return;
+      const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+      if (state.expenses.some((e) => e.recurringId === bill.id && monthOf(e.date) === monthKey)) return;
+      const last = daysInMonth(monthKey);
+      const day = String(Math.min(Number(bill.day) || 1, last)).padStart(2, "0");
+      state.expenses = [
+        { id: Date.now(), recurringId: bill.id, title: bill.title, category: bill.category, amount: Number(bill.amount), date: `${monthKey}-${day}` },
+        ...state.expenses,
+      ];
     }
 
     state.month = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
     saveExpenses();
     renderAll();
+    return;
+  }
+
+  const editRecurringButton = event.target.closest("[data-edit-recurring]");
+  if (editRecurringButton) {
+    const r = (state.recurring || []).find((x) => String(x.id) === editRecurringButton.dataset.editRecurring);
+    if (r) openRecurring({ item: r });
     return;
   }
 
@@ -1431,7 +1495,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=35").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=36").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
@@ -1446,12 +1510,40 @@ renderAll();
 
 // ซิงก์สองทาง: โหลดข้อมูลล่าสุดจาก Google Sheet อัตโนมัติทุกครั้งที่เปิดแอป (ถ้าตั้งลิงก์ไว้แล้ว)
 // เปิด auto-save หลังโหลดเสร็จเท่านั้น เพื่อกันข้อมูลเก่าในเครื่องเขียนทับชีต
+// ย้ายข้อมูลเข้าระบบใหม่ครั้งเดียว: ใส่ freq ให้รายการเดิม, ใส่วันผ่อนครบรถ/iPhone, และเพิ่มรายจ่ายรายปีตั้งต้นถ้ายังไม่มี
+function migrateRecurring() {
+  let changed = false;
+  (state.recurring || []).forEach((r) => {
+    if (!r.freq) {
+      r.freq = "monthly";
+      changed = true;
+    }
+    if (INSTALLMENT_END[r.id] && !r.end) {
+      r.end = INSTALLMENT_END[r.id];
+      changed = true;
+    }
+  });
+  if (!(state.recurring || []).some((r) => r.freq === "yearly")) {
+    YEARLY_BILLS.forEach((b) => state.recurring.push({ ...b, freq: "yearly" }));
+    changed = true;
+  }
+  return changed;
+}
+
 if (state.syncEndpoint) {
   Promise.resolve(syncFromSheet()).finally(() => {
     initialSyncDone = true;
+    if (migrateRecurring()) {
+      saveRecurring();
+      renderAll();
+    }
   });
 } else {
   initialSyncDone = true;
+  if (migrateRecurring()) {
+    saveRecurring();
+    renderAll();
+  }
 }
 
 // โหลดข้อมูลล่าสุดใหม่ทุกครั้งที่เปิด/สลับกลับมาที่แอป (สำคัญสำหรับไอคอนโฮม/PWA ที่ไม่รีเฟรชหน้าเอง)
