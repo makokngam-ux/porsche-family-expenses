@@ -851,10 +851,15 @@ async function syncToSheet({ silent = false } = {}) {
   if (!silent) setSyncStatus("กำลังบันทึกขึ้น Google Sheets...");
 
   try {
-    const payload = await requestSheetAction(state.syncEndpoint, {
-      action: "saveAll",
-      payload: JSON.stringify(syncPayload()),
+    const response = await fetch(state.syncEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "saveAll", data: syncPayload() }),
     });
+    const payload = await response.json();
+    if (payload?.ok === false) {
+      throw new Error(payload.error || "บันทึกขึ้น Google Sheets ไม่สำเร็จ");
+    }
     if (!silent) {
       const updatedAt = payload?.updatedAt ? ` (${new Date(payload.updatedAt).toLocaleString("th-TH")})` : "";
       setSyncStatus(`ส่งข้อมูลไป Google Sheets แล้ว${updatedAt}`, "good");
