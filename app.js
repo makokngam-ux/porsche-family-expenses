@@ -1161,8 +1161,7 @@ async function syncFromSheet() {
     state.expenses = Array.isArray(data.expenses) ? data.expenses : state.expenses;
     state.budget = data.budget || state.budget;
     state.recurring = Array.isArray(data.recurring) ? data.recurring : state.recurring;
-    const newest = state.expenses.map((item) => item.date).sort().at(-1);
-    if (newest) state.month = monthOf(newest);
+    // เปิดแอปให้อยู่ที่ "เดือนปัจจุบัน" เสมอ ไม่ดีดไปเดือนของรายการล่าสุด
     saveLocalSnapshot();
     renderAll();
     setSyncStatus(`โหลดข้อมูลสำเร็จ${data.updatedAt ? ` (${new Date(data.updatedAt).toLocaleString("th-TH")})` : ""}`, "good");
@@ -1549,7 +1548,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=43").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=44").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
