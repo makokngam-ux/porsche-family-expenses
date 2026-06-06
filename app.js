@@ -762,6 +762,9 @@ function renderAll() {
 
 // กราฟแท่งรายวัน — ยอดรวมที่บันทึกจริงของแต่ละวันในเดือนที่เลือก
 function renderDailyChart() {
+  document.querySelectorAll("[data-daily-month]").forEach((el) => {
+    el.textContent = formatMonth(state.month);
+  });
   const container = document.querySelector("[data-daily-chart]");
   if (!container) return;
   const days = daysInMonth(state.month);
@@ -777,9 +780,9 @@ function renderDailyChart() {
 
   const max = Math.max(...totals, 1);
   const W = 320;
-  const H = 150;
-  const top = 12;
-  const bottom = 126;
+  const H = 158;
+  const top = 24;
+  const bottom = 132;
   const left = 8;
   const innerW = W - left * 2;
   const slot = innerW / days;
@@ -788,21 +791,27 @@ function renderDailyChart() {
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
   let bars = "";
+  let amts = "";
   let labels = "";
   totals.forEach((t, i) => {
     const day = i + 1;
     const x = left + i * slot;
+    const cx = x + barW / 2;
     const h = (t / max) * (bottom - top);
     const y = bottom - h;
     const key = `${state.month}-${String(day).padStart(2, "0")}`;
-    const color = t > 0 ? (key === todayKey ? "#f85b8b" : "#ff9bb2") : "#f3dbe3";
+    const isToday = key === todayKey;
+    const color = t > 0 ? (isToday ? "#f85b8b" : "#ff9bb2") : "#f3dbe3";
     bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" rx="2" fill="${color}"><title>วันที่ ${day}: ฿${money.format(t)}</title></rect>`;
-    if (day === 1 || day % 5 === 0 || day === days) {
-      labels += `<text x="${(x + barW / 2).toFixed(1)}" y="140" text-anchor="middle" font-size="8" fill="#9a8a92">${day}</text>`;
+    if (t > 0) {
+      amts += `<text x="${cx.toFixed(1)}" y="${(y - 3).toFixed(1)}" text-anchor="middle" font-size="6.5" font-weight="700" fill="#d6447a">${shortMoney.format(t)}</text>`;
+      labels += `<text x="${cx.toFixed(1)}" y="148" text-anchor="middle" font-size="8" font-weight="700" fill="#5b4e53">${day}</text>`;
+    } else if (day === 1 || day % 5 === 0 || day === days) {
+      labels += `<text x="${cx.toFixed(1)}" y="148" text-anchor="middle" font-size="7.5" fill="#bcaeb4">${day}</text>`;
     }
   });
 
-  container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟแท่งยอดรวมรายวัน">${bars}${labels}</svg>`;
+  container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟแท่งยอดรวมรายวัน">${bars}${amts}${labels}</svg>`;
 }
 
 function renderYearly() {
@@ -1422,7 +1431,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=32").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=33").catch(() => {});
 }
 
 setView(location.hash.replace("#", "") || "home");

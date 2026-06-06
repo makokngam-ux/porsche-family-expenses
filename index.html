@@ -212,7 +212,7 @@
         <section class="panel analysis-card">
           <div class="panel-title">
             <h2>ค่าใช้จ่ายตามหมวดหมู่</h2>
-            <a href="#categories">ดูทั้งหมด ›</a>
+            <a href="#records" data-open-records>ดูทั้งหมด ›</a>
           </div>
           <div class="big-chart-wrap">
             <div class="big-donut" aria-label="กราฟโดนัทหมวดหมู่ค่าใช้จ่าย" data-big-donut>
@@ -235,7 +235,7 @@
         <section class="panel trend-panel">
           <div class="panel-title">
             <h2>แนวโน้มค่าใช้จ่าย</h2>
-            <a href="#trend">ดูทั้งหมด ›</a>
+            <a href="#records" data-open-records>ดูทั้งหมด ›</a>
           </div>
           <div class="trend-chart" aria-label="กราฟเส้นแนวโน้มค่าใช้จ่ายรายเดือน">
             <svg viewBox="0 0 320 170" role="img">
@@ -270,7 +270,7 @@
 
         <section class="panel">
           <div class="panel-title">
-            <h2>รายวัน (เดือนนี้) <span class="head-sum" data-daily-total></span></h2>
+            <h2>รายวัน <span data-daily-month></span> <span class="head-sum" data-daily-total></span></h2>
           </div>
           <div class="daily-chart" data-daily-chart></div>
         </section>
@@ -545,6 +545,6 @@
         </form>
       </div>
     </div>
-    <script src="app.js?v=32"></script>
+    <script src="app.js?v=33"></script>
   </body>
 </html>
