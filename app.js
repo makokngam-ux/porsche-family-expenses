@@ -1165,3 +1165,8 @@ if ("serviceWorker" in navigator) {
 
 setView(location.hash.replace("#", "") || "home");
 renderAll();
+
+// ซิงก์สองทาง: โหลดข้อมูลล่าสุดจาก Google Sheet อัตโนมัติทุกครั้งที่เปิดแอป (ถ้าตั้งลิงก์ไว้แล้ว)
+if (state.syncEndpoint) {
+  syncFromSheet();
+}
