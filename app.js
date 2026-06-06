@@ -16,6 +16,9 @@ const INSTALLMENT_END = {
 const YEARLY_BILLS = [
   { id: 301, title: "ประกันรถยนต์", category: "car", amount: 18000, month: 2, day: 21 },
   { id: 302, title: "ภาษีรถยนต์", category: "car", amount: 1650, month: 2, day: 21 },
+  { id: 303, title: "ค่าเทอม น้องพอร์ช (เทอม 1)", category: "education", amount: 50000, month: 3, day: 1 },
+  { id: 304, title: "ค่าเทอม น้องพอร์ช (เทอม 2)", category: "education", amount: 50000, month: 10, day: 1 },
+  { id: 305, title: "Canva", category: "subscription", amount: 1850, month: 1, day: 1 },
 ];
 
 const categories = {
@@ -562,6 +565,13 @@ function renderRecurring() {
         })
         .join("")
     : `<li class="empty-row"><b>ยังไม่มีรายจ่ายประจำ</b></li>`;
+
+  const monthlyTotal = (state.recurring || [])
+    .filter((r) => !installmentEnded(r.id))
+    .reduce((s, r) => s + Number(r.amount || 0), 0);
+  document.querySelectorAll("[data-recurring-total]").forEach((el) => {
+    el.textContent = state.recurring.length ? `รวม ฿${shortMoney.format(monthlyTotal)}/เดือน` : "";
+  });
 }
 
 function buildAlerts() {
@@ -763,6 +773,10 @@ function renderYearly() {
       <button class="small-pill" type="button" data-post-recurring="${item.id}" ${paid ? "disabled" : ""}>${paid ? "บันทึกแล้ว" : "บันทึก"}</button>
     </li>`;
   }).join("");
+  const yearlyTotal = YEARLY_BILLS.reduce((s, b) => s + Number(b.amount || 0), 0);
+  document.querySelectorAll("[data-yearly-total]").forEach((el) => {
+    el.textContent = `รวม ฿${shortMoney.format(yearlyTotal)}/ปี`;
+  });
 }
 
 function openModal(item = null) {
@@ -1362,7 +1376,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=30").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=31").catch(() => {});
 }
 
 setView(location.hash.replace("#", "") || "home");

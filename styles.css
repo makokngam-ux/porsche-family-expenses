@@ -1426,3 +1426,12 @@ select:focus {
   color: #d9892b;
   font-weight: 700;
 }
+
+/* ยอดรวมเล็กๆ ข้างหัวข้อรายจ่ายประจำ */
+.head-sum {
+  margin-left: 4px;
+  color: var(--pink);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
