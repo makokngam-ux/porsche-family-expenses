@@ -287,7 +287,7 @@ function dueSoonRecurring() {
       const day = Math.min(Number(r.day) || 1, last);
       const diff = Math.round((new Date(y, m, day) - todayMid) / 86400000);
       const postedThisMonth = state.expenses.some((e) => e.recurringId === r.id && monthOf(e.date) === monthKey);
-      return diff <= 2 && !postedThisMonth;
+      return diff <= 0 && !postedThisMonth;
     })
     .sort((a, b) => (Number(a.day) || 1) - (Number(b.day) || 1));
 }
@@ -304,7 +304,7 @@ function yearlyDueSoon() {
   return yearlyBills().filter((b) => {
     if (!b.month) return false;
     const diff = Math.round((new Date(y, b.month - 1, b.day || 1) - todayMid) / 86400000);
-    return diff <= 2 && diff >= -31 && !yearlyPostedThisYear(b.id, y);
+    return diff <= 0 && !yearlyPostedThisYear(b.id, y);
   });
 }
 
@@ -616,16 +616,28 @@ function buildAlerts() {
     }
   });
 
-  state.recurring.forEach((item) => {
-    if (recurringPosted(item)) return;
-    const remaining = daysUntil(item.day);
-    if (remaining <= 7) {
-      alerts.push({
-        title: `บิลใกล้ครบกำหนด: ${item.title}`,
-        detail: remaining < 0 ? "เลยกำหนดแล้วและยังไม่ได้บันทึก" : `อีก ${remaining} วัน · ฿ ${money.format(item.amount)}`,
-        tone: remaining < 0 ? "danger" : "warn",
-      });
-    }
+  // รายเดือน + รายปี: เตือนเฉพาะเมื่อถึง/เลยกำหนด และยังไม่ได้บันทึก (ค้างจนกว่าจะกดบันทึก)
+  const today = new Date();
+  const ty = today.getFullYear();
+  const tm = today.getMonth();
+  const lastDay = daysInMonth(`${ty}-${String(tm + 1).padStart(2, "0")}`);
+  const todayMid = new Date(ty, tm, today.getDate());
+  dueSoonRecurring().forEach((item) => {
+    const day = Math.min(Number(item.day) || 1, lastDay);
+    const diff = Math.round((new Date(ty, tm, day) - todayMid) / 86400000);
+    alerts.push({
+      title: `บิลถึงกำหนด: ${item.title}`,
+      detail: diff === 0 ? "ครบกำหนดวันนี้ ยังไม่ได้บันทึก" : `เลยกำหนด ${Math.abs(diff)} วัน ยังไม่ได้บันทึก`,
+      tone: "danger",
+    });
+  });
+  yearlyDueSoon().forEach((item) => {
+    const diff = Math.round((new Date(ty, item.month - 1, item.day || 1) - todayMid) / 86400000);
+    alerts.push({
+      title: `บิลรายปีถึงกำหนด: ${item.title}`,
+      detail: diff === 0 ? "ครบกำหนดวันนี้ ยังไม่ได้บันทึก" : `เลยกำหนด ${Math.abs(diff)} วัน ยังไม่ได้บันทึก`,
+      tone: "danger",
+    });
   });
 
   if (!monthlyExpenses().some((item) => item.date === new Date().toISOString().slice(0, 10))) {
@@ -1495,7 +1507,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=36").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=37").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {

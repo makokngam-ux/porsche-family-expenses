@@ -1341,6 +1341,7 @@ select:focus {
     min-height: 100vh;
     border: 0;
     border-radius: 0;
+    box-shadow: none;
   }
 
   .quick-grid {
