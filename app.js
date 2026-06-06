@@ -103,7 +103,7 @@ let state = {
   syncEndpoint: loadSyncEndpoint(),
   month: currentMonthKey(),
   categoryFilter: "all",
-  period: "month",
+  period: "all",
   view: "home",
 };
 
@@ -232,6 +232,10 @@ function monthlyExpenses() {
 }
 
 function selectedExpenses() {
+  if (state.period === "all") {
+    return state.expenses;
+  }
+
   if (state.period === "year") {
     return state.expenses.filter((item) => monthOf(item.date).slice(0, 4) === state.month.slice(0, 4));
   }
@@ -433,7 +437,8 @@ function renderLabels() {
     el.textContent = `ค่าใช้จ่าย ${formatMonth(state.month)}`;
   });
   document.querySelectorAll("[data-report-month]").forEach((el) => {
-    el.textContent = formatMonth(state.month);
+    el.textContent =
+      state.period === "all" ? "ทั้งหมด (ทุกเดือน)" : formatMonth(state.month);
   });
   document.querySelectorAll("[data-month-filter]").forEach((el) => {
     el.value = state.month;
@@ -441,17 +446,23 @@ function renderLabels() {
 }
 
 function renderTotals() {
-  const total = sum(selectedExpenses());
+  // หน้าหลัก = เดือนที่เลือกเสมอ
+  const monthTotal = sum(monthlyExpenses());
   document.querySelectorAll("[data-total-amount]").forEach((el) => {
-    el.textContent = `฿ ${money.format(total)}`;
+    el.textContent = `฿ ${money.format(monthTotal)}`;
   });
-  document.querySelectorAll("[data-total-short], [data-analysis-total]").forEach((el) => {
-    el.textContent = `฿ ${shortMoney.format(total)}`;
+  document.querySelectorAll("[data-total-short]").forEach((el) => {
+    el.textContent = `฿ ${shortMoney.format(monthTotal)}`;
+  });
+  // หน้าวิเคราะห์ = ตามแท็บ (ภาพรวม=ทั้งหมด / รายเดือน / รายวัน)
+  const periodTotal = sum(selectedExpenses());
+  document.querySelectorAll("[data-analysis-total]").forEach((el) => {
+    el.textContent = `฿ ${shortMoney.format(periodTotal)}`;
   });
 }
 
 function renderQuickCards() {
-  const items = selectedExpenses();
+  const items = monthlyExpenses();
   Object.entries(quickGroups).forEach(([group, label]) => {
     const card = document.querySelector(`[data-quick-group="${group}"]`);
     if (!card) return;
@@ -486,25 +497,33 @@ function renderBudget() {
 }
 
 function renderCategoryViews() {
-  const items = categoryTotals();
-  const total = sum(selectedExpenses());
-  const visibleItems = items.filter((item) => item.total > 0);
-  const gradient = donutGradient(items, total);
-  document.querySelectorAll("[data-donut], [data-big-donut]").forEach((el) => {
-    el.style.background = gradient;
+  // ===== หน้าหลัก: โดนัท + legend = เฉพาะเดือนที่เลือกเสมอ =====
+  const monthItems = categoryTotals(monthlyExpenses());
+  const monthTotal = sum(monthlyExpenses());
+  const monthVisible = monthItems.filter((item) => item.total > 0);
+  document.querySelectorAll("[data-donut]").forEach((el) => {
+    el.style.background = donutGradient(monthItems, monthTotal);
   });
 
   const legend = document.querySelector("[data-legend-list]");
   if (legend) {
-    legend.innerHTML = visibleItems.length
-      ? visibleItems
+    legend.innerHTML = monthVisible.length
+      ? monthVisible
           .map(
             (item) =>
-              `<li>${iconBadge(item.key)}<b>${item.label}</b><em>${percent(item.total, total)}%</em></li>`,
+              `<li>${iconBadge(item.key)}<b>${item.label}</b><em>${percent(item.total, monthTotal)}%</em></li>`,
           )
           .join("")
       : `<li><span class="category-icon">${iconMarkup("i-more")}</span><b>ยังไม่มีข้อมูล</b><em>0%</em></li>`;
   }
+
+  // ===== หน้าวิเคราะห์: โดนัทใหญ่ + รายการหมวด = ตามแท็บ (ภาพรวม=ทั้งหมด / รายเดือน / รายวัน) =====
+  const items = categoryTotals(selectedExpenses());
+  const total = sum(selectedExpenses());
+  const visibleItems = items.filter((item) => item.total > 0);
+  document.querySelectorAll("[data-big-donut]").forEach((el) => {
+    el.style.background = donutGradient(items, total);
+  });
 
   const categoryList = document.querySelector("[data-category-list]");
   if (categoryList) {
@@ -1504,7 +1523,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=39").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=40").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
