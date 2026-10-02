@@ -198,16 +198,28 @@ function cellText_(value, pattern) {
 
 function writeRows_(kind, rows) {
   const sheet = sheet_(kind);
-  sheet.clearContents();
-  sheet.getRange(1, 1, 1, HEADERS[kind].length).setValues([HEADERS[kind]]);
-  if (rows.length) {
-    (TEXT_COLUMNS[kind] || []).forEach((name) => {
-      const col = HEADERS[kind].indexOf(name) + 1;
-      if (col > 0) sheet.getRange(2, col, rows.length, 1).setNumberFormat("@");
-    });
-    sheet.getRange(2, 1, rows.length, HEADERS[kind].length).setValues(rows);
+  const width = HEADERS[kind].length;
+  const values = [HEADERS[kind]].concat(rows);
+
+  // ตั้งคอลัมน์เป็นข้อความ (ถ้า sheet เป็น "ตาราง" ที่กำหนดชนิดคอลัมน์ไว้ Sheets จะไม่ยอม → ข้ามไป)
+  (TEXT_COLUMNS[kind] || []).forEach((name) => {
+    const col = HEADERS[kind].indexOf(name) + 1;
+    if (col > 0 && rows.length) {
+      try {
+        sheet.getRange(2, col, rows.length, 1).setNumberFormat("@");
+      } catch (error) {}
+    }
+  });
+
+  // เขียนทับก่อน แล้วค่อยล้างแถวที่เหลือ — ถ้าเขียนไม่สำเร็จ ข้อมูลเดิมจะไม่หาย (เดิมล้างก่อนเขียน)
+  sheet.getRange(1, 1, values.length, width).setValues(values);
+  const lastRow = sheet.getLastRow();
+  if (lastRow > values.length) {
+    sheet.getRange(values.length + 1, 1, lastRow - values.length, width).clearContent();
   }
-  sheet.autoResizeColumns(1, HEADERS[kind].length);
+  try {
+    sheet.autoResizeColumns(1, width);
+  } catch (error) {}
 }
 
 function readRows_(kind) {
