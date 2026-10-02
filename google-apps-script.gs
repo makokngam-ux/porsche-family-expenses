@@ -12,6 +12,12 @@ const HEADERS = {
   meta: ["key", "value"],
 };
 
+// คอลัมน์ที่ต้องเก็บเป็นข้อความ (ถ้าเป็นตัวเลข/วันที่ Sheets จะแปลงเอง เช่น "2028-01" → วันที่ 1 ม.ค.)
+const TEXT_COLUMNS = {
+  expenses: ["id", "date", "recurringId"],
+  recurring: ["id", "end"],
+};
+
 function doGet(event) {
   const action = event.parameter.action || "loadAll";
   if (action === "loadAll") {
@@ -22,7 +28,9 @@ function doGet(event) {
     try {
       const data = JSON.parse(event.parameter.payload || "{}");
       const lock = LockService.getScriptLock();
-      lock.waitLock(10000);
+      if (!lock.tryLock(30000)) {
+        return output_(event, { ok: false, busy: true, error: "ระบบกำลังบันทึกอยู่ ลองใหม่อีกครั้ง" });
+      }
       try {
         saveAll_(data);
       } finally {
@@ -41,22 +49,59 @@ function doGet(event) {
 function doPost(event) {
   try {
     const body = JSON.parse(event.postData.contents || "{}");
-    if (body.action !== "saveAll") {
+    if (body.action !== "saveAll" && body.action !== "applyOps") {
       return output_(event, { ok: false, error: "Unknown action" });
     }
 
     const lock = LockService.getScriptLock();
-    lock.waitLock(10000);
+    if (!lock.tryLock(30000)) {
+      return output_(event, { ok: false, busy: true, error: "ระบบกำลังบันทึกอยู่ ลองใหม่อีกครั้ง" });
+    }
+    let data;
+    const updatedAt = new Date().toISOString();
     try {
-      saveAll_(body.data || {});
+      if (body.action === "applyOps") {
+        // วิธีใหม่: ส่งมาเฉพาะรายการที่เปลี่ยน แล้วรวมกับข้อมูลล่าสุดในชีต → ไม่ทับรายการที่เครื่องอื่นเพิ่ม
+        data = applyOps_(Array.isArray(body.ops) ? body.ops : [], updatedAt);
+      } else {
+        // วิธีเดิม (แอปเวอร์ชันเก่าที่ยังค้างในเครื่อง): เขียนทับทั้งก้อน
+        saveAll_({ ...(body.data || {}), updatedAt });
+      }
     } finally {
       lock.releaseLock();
     }
 
-    return output_(event, { ok: true, updatedAt: new Date().toISOString() });
+    return output_(event, { ok: true, updatedAt, data });
   } catch (error) {
     return output_(event, { ok: false, error: error.message });
   }
+}
+
+// ops: [{ type: "upsertExpense", item }, { type: "deleteExpense", id }, { type: "upsertRecurring", item },
+//        { type: "deleteRecurring", id }, { type: "setBudget", budget }]
+function applyOps_(ops, updatedAt) {
+  const data = loadAll_();
+  const sameId = (a, b) => String(a) === String(b);
+  const upsert = (list, item) => {
+    if (!item || item.id === undefined || item.id === null || item.id === "") return list;
+    const index = list.findIndex((x) => sameId(x.id, item.id));
+    if (index >= 0) list[index] = item;
+    else list.unshift(item);
+    return list;
+  };
+
+  ops.forEach((op) => {
+    if (!op) return;
+    if (op.type === "upsertExpense") upsert(data.expenses, op.item);
+    else if (op.type === "deleteExpense") data.expenses = data.expenses.filter((x) => !sameId(x.id, op.id));
+    else if (op.type === "upsertRecurring") upsert(data.recurring, op.item);
+    else if (op.type === "deleteRecurring") data.recurring = data.recurring.filter((x) => !sameId(x.id, op.id));
+    else if (op.type === "setBudget" && op.budget && typeof op.budget === "object") data.budget = op.budget;
+  });
+
+  data.updatedAt = updatedAt;
+  saveAll_(data);
+  return loadAll_();
 }
 
 function saveAll_(data) {
@@ -122,8 +167,8 @@ function loadAll_() {
       title: row[1] || "",
       category: row[2] || "other",
       amount: Number(row[3] || 0),
-      date: row[4] || "",
-      recurringId: row[5] || "",
+      date: cellText_(row[4], "yyyy-MM-dd"),
+      recurringId: Number(row[5]) || row[5] || "",
     })).filter((item) => item.title && item.date),
     budget,
     recurring: readRows_("recurring").map((row) => ({
@@ -134,9 +179,16 @@ function loadAll_() {
       day: Number(row[4] || 1),
       freq: row[5] || "monthly",
       month: row[6] ? Number(row[6]) : null,
-      end: row[7] || "",
+      end: cellText_(row[7], "yyyy-MM"),
     })).filter((item) => item.title),
   };
+}
+
+function cellText_(value, pattern) {
+  if (value instanceof Date) {
+    return Utilities.formatDate(value, spreadsheet_().getSpreadsheetTimeZone(), pattern);
+  }
+  return value === null || value === undefined ? "" : String(value);
 }
 
 function writeRows_(kind, rows) {
@@ -144,6 +196,10 @@ function writeRows_(kind, rows) {
   sheet.clearContents();
   sheet.getRange(1, 1, 1, HEADERS[kind].length).setValues([HEADERS[kind]]);
   if (rows.length) {
+    (TEXT_COLUMNS[kind] || []).forEach((name) => {
+      const col = HEADERS[kind].indexOf(name) + 1;
+      if (col > 0) sheet.getRange(2, col, rows.length, 1).setNumberFormat("@");
+    });
     sheet.getRange(2, 1, rows.length, HEADERS[kind].length).setValues(rows);
   }
   sheet.autoResizeColumns(1, HEADERS[kind].length);

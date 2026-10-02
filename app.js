@@ -2,6 +2,8 @@ const storageKey = "porsche-family-expenses";
 const budgetStorageKey = "porsche-family-budget";
 const recurringStorageKey = "porsche-family-recurring";
 const syncEndpointStorageKey = "porsche-family-sheet-endpoint";
+// สำเนาข้อมูลล่าสุดที่ได้จากชีต — ใช้เทียบหาว่าเครื่องนี้เพิ่ม/แก้/ลบอะไรไปบ้างที่ยังไม่ขึ้นชีต
+const syncBaseStorageKey = "porsche-family-sync-base";
 // ลิงก์ Google Apps Script Web App เริ่มต้น (ฝังไว้ให้ทุกเครื่องใช้ได้เลย ไม่ต้องกรอกเอง)
 const DEFAULT_SYNC_ENDPOINT =
   "https://script.google.com/macros/s/AKfycbyMfOvzJL56lBaO1qzLNGRgjPyN4O2ZqwkQt9eMGRISj_6nm35mklvDeLUQStwvF5OBQw/exec";
@@ -1073,22 +1075,17 @@ function setSyncStatus(message, tone = "") {
 }
 
 function saveSyncEndpoint(value) {
-  state.syncEndpoint = value.trim();
+  const next = value.trim();
+  if (next !== state.syncEndpoint) {
+    syncBase = null;
+    localStorage.removeItem(syncBaseStorageKey);
+  }
+  state.syncEndpoint = next;
   if (state.syncEndpoint) {
     localStorage.setItem(syncEndpointStorageKey, state.syncEndpoint);
   } else {
     localStorage.removeItem(syncEndpointStorageKey);
   }
-}
-
-function syncPayload() {
-  return {
-    version: 1,
-    updatedAt: new Date().toISOString(),
-    expenses: state.expenses,
-    budget: state.budget,
-    recurring: state.recurring,
-  };
 }
 
 function normalizeRemoteData(payload) {
@@ -1147,50 +1144,258 @@ async function loadFromSheet(endpoint) {
   return normalizeRemoteData(payload);
 }
 
-async function syncFromSheet() {
-  if (!state.syncEndpoint) {
-    openSync();
-    setSyncStatus("ใส่ลิงก์ Web App ก่อนโหลดข้อมูล", "error");
-    return;
-  }
+// ===== ซิงก์แบบรวมข้อมูล (merge) =====
+// เดิม: ทุกครั้งที่บันทึก จะส่ง "ข้อมูลทั้งหมดในเครื่อง" ไปเขียนทับชีต
+//   → ถ้าอีกเครื่องเพิ่มรายการไว้ หรือส่งขึ้นชีตไม่สำเร็จแล้วโหลดจากชีตทับ รายการจะหาย
+// ใหม่: เทียบกับข้อมูลชีตล่าสุดที่เคยโหลด (syncBase) แล้วส่งเฉพาะ "เพิ่ม/แก้/ลบ" ไปรวมในชีต
+//   รายการที่ยังส่งไม่สำเร็จจะค้างในเครื่องและส่งใหม่อัตโนมัติ ไม่ถูกโหลดจากชีตทับ
 
-  setSyncStatus("กำลังโหลดข้อมูลจาก Google Sheets...");
+function loadSyncBase() {
   try {
-    const data = await loadFromSheet(state.syncEndpoint);
-    // โหลดสำเร็จ → ใช้ข้อมูลจากชีตเป็นหลักเสมอ (แม้ว่างเปล่า) เพื่อให้การลบ/ล้างซิงก์ข้ามเครื่องได้
-    state.expenses = Array.isArray(data.expenses) ? data.expenses : state.expenses;
-    state.budget = data.budget || state.budget;
-    state.recurring = Array.isArray(data.recurring) ? data.recurring : state.recurring;
-    // เปิดแอปให้อยู่ที่ "เดือนปัจจุบัน" เสมอ ไม่ดีดไปเดือนของรายการล่าสุด
-    saveLocalSnapshot();
-    renderAll();
-    setSyncStatus(`โหลดข้อมูลสำเร็จ${data.updatedAt ? ` (${new Date(data.updatedAt).toLocaleString("th-TH")})` : ""}`, "good");
-  } catch (error) {
-    setSyncStatus(error.message || "โหลดข้อมูลไม่สำเร็จ", "error");
+    const base = JSON.parse(localStorage.getItem(syncBaseStorageKey));
+    return base && Array.isArray(base.expenses) && Array.isArray(base.recurring) ? base : null;
+  } catch {
+    return null;
   }
 }
 
-async function syncToSheet({ silent = false } = {}) {
-  if (!state.syncEndpoint) return;
-  if (!silent) setSyncStatus("กำลังบันทึกขึ้น Google Sheets...");
+let syncBase = loadSyncBase();
 
+function saveSyncBase(base) {
+  syncBase = base;
+  localStorage.setItem(syncBaseStorageKey, JSON.stringify(base));
+}
+
+// รูปแบบเดียวกับที่ Apps Script เก็บ/คืนค่า เพื่อให้เทียบกันได้ตรง
+function normExpense(item) {
+  return {
+    id: item.id,
+    title: String(item.title || ""),
+    category: item.category || "other",
+    amount: Number(item.amount || 0),
+    date: toISODate(item.date),
+    recurringId: item.recurringId || "",
+  };
+}
+
+function normRecurring(item) {
+  return {
+    id: item.id,
+    title: String(item.title || ""),
+    category: item.category || "other",
+    amount: Number(item.amount || 0),
+    day: Number(item.day || 1),
+    freq: item.freq || "monthly",
+    month: item.month ? Number(item.month) : null,
+    end: item.end || "",
+  };
+}
+
+function normBudget(budget) {
+  const categories = (budget && budget.categories) || {};
+  const sorted = {};
+  Object.keys(categories).sort().forEach((key) => {
+    sorted[key] = Number(categories[key] || 0);
+  });
+  return { total: Number((budget && budget.total) || 0), categories: sorted };
+}
+
+function diffList(baseList, currentList, norm, kind) {
+  const ops = [];
+  const baseMap = new Map(baseList.map((item) => [String(item.id), JSON.stringify(norm(item))]));
+  const currentIds = new Set();
+  currentList.forEach((item) => {
+    const key = String(item.id);
+    currentIds.add(key);
+    const normalized = norm(item);
+    if (baseMap.get(key) !== JSON.stringify(normalized)) ops.push({ type: `upsert${kind}`, item: normalized });
+  });
+  baseList.forEach((item) => {
+    if (!currentIds.has(String(item.id))) ops.push({ type: `delete${kind}`, id: item.id });
+  });
+  return ops;
+}
+
+function diffOps(base, current) {
+  const ops = [
+    ...diffList(base.expenses || [], current.expenses || [], normExpense, "Expense"),
+    ...diffList(base.recurring || [], current.recurring || [], normRecurring, "Recurring"),
+  ];
+  if (JSON.stringify(normBudget(base.budget)) !== JSON.stringify(normBudget(current.budget))) {
+    ops.push({ type: "setBudget", budget: normBudget(current.budget) });
+  }
+  return ops;
+}
+
+// ส่งทุกอย่างในเครื่องขึ้นไปรวม (ไม่ลบอะไรในชีต) — ใช้กับปุ่ม "บันทึกขึ้นชีต"
+function pushAllOps(current) {
+  return [
+    ...(current.expenses || []).map((item) => ({ type: "upsertExpense", item: normExpense(item) })),
+    ...(current.recurring || []).map((item) => ({ type: "upsertRecurring", item: normRecurring(item) })),
+    { type: "setBudget", budget: normBudget(current.budget) },
+  ];
+}
+
+// เครื่องที่เพิ่งอัปเดตแอป (ยังไม่มี syncBase): เก็บรายการที่สร้างหลังชีตอัปเดตล่าสุดแต่ยังไม่อยู่ในชีตไว้ ไม่ให้หาย
+function firstRunOps(remote) {
+  const remoteIds = new Set(remote.expenses.map((item) => String(item.id)));
+  const remoteTime = Date.parse(remote.updatedAt) || 0;
+  if (!remoteTime) return [];
+  return state.expenses
+    .filter((item) => !remoteIds.has(String(item.id)) && Number(item.id) > remoteTime)
+    .map((item) => ({ type: "upsertExpense", item: normExpense(item) }));
+}
+
+function applyOpsLocal(data, ops) {
+  const result = { expenses: [...data.expenses], recurring: [...data.recurring], budget: data.budget };
+  const sameId = (a, b) => String(a) === String(b);
+  const upsert = (list, item) => {
+    const index = list.findIndex((x) => sameId(x.id, item.id));
+    if (index >= 0) list[index] = item;
+    else list.unshift(item);
+  };
+  ops.forEach((op) => {
+    if (op.type === "upsertExpense") upsert(result.expenses, op.item);
+    else if (op.type === "deleteExpense") result.expenses = result.expenses.filter((x) => !sameId(x.id, op.id));
+    else if (op.type === "upsertRecurring") upsert(result.recurring, op.item);
+    else if (op.type === "deleteRecurring") result.recurring = result.recurring.filter((x) => !sameId(x.id, op.id));
+    else if (op.type === "setBudget") result.budget = op.budget;
+  });
+  return result;
+}
+
+function currentSnapshot() {
+  return { expenses: state.expenses, recurring: state.recurring || [], budget: state.budget };
+}
+
+async function postToSheet(endpoint, body) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 20000);
   try {
-    const response = await fetch(state.syncEndpoint, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "saveAll", data: syncPayload() }),
+      body: JSON.stringify(body),
+      signal: controller.signal,
     });
     const payload = await response.json();
-    if (payload?.ok === false) {
-      throw new Error(payload.error || "บันทึกขึ้น Google Sheets ไม่สำเร็จ");
-    }
-    if (!silent) {
-      const updatedAt = payload?.updatedAt ? ` (${new Date(payload.updatedAt).toLocaleString("th-TH")})` : "";
-      setSyncStatus(`ส่งข้อมูลไป Google Sheets แล้ว${updatedAt}`, "good");
-    }
-  } catch (error) {
-    if (!silent) setSyncStatus(error.message || "บันทึกขึ้น Google Sheets ไม่สำเร็จ", "error");
+    if (payload?.ok === false) throw new Error(payload.error || "บันทึกขึ้น Google Sheets ไม่สำเร็จ");
+    return payload;
+  } finally {
+    window.clearTimeout(timer);
   }
+}
+
+let syncChain = Promise.resolve();
+let syncRetryTimer = null;
+let syncRetryDelay = 0;
+
+// ทำทีละรอบเสมอ (กันโหลด/บันทึกซ้อนกันแล้วข้อมูลทับกัน)
+function runSync(options = {}) {
+  syncChain = syncChain.then(() => doSync(options)).catch((error) => console.warn("sync error", error));
+  return syncChain;
+}
+
+function scheduleSyncRetry(failed) {
+  window.clearTimeout(syncRetryTimer);
+  syncRetryDelay = failed ? Math.min(syncRetryDelay ? syncRetryDelay * 2 : 5000, 60000) : 0;
+  syncRetryTimer = window.setTimeout(() => runSync({ silent: true }), failed ? syncRetryDelay : 900);
+}
+
+async function doSync({ silent = true, pushAll = false } = {}) {
+  const endpoint = state.syncEndpoint;
+  if (!endpoint) return;
+  window.clearTimeout(syncRetryTimer);
+
+  const baseAtStart = syncBase;
+  const ops = pushAll ? pushAllOps(currentSnapshot()) : baseAtStart ? diffOps(baseAtStart, currentSnapshot()) : [];
+  if (!silent) setSyncStatus(ops.length ? "กำลังบันทึกขึ้น Google Sheets..." : "กำลังโหลดข้อมูลจาก Google Sheets...");
+
+  let remote = null;
+  let error = null;
+  let legacyServer = false;
+
+  if (ops.length) {
+    try {
+      const payload = await postToSheet(endpoint, { action: "applyOps", ops });
+      if (payload?.data) remote = normalizeRemoteData(payload);
+    } catch (err) {
+      error = err;
+      // Apps Script ยังเป็นเวอร์ชันเก่า (ยังไม่ได้ deploy โค้ดใหม่) → ใช้ saveAll แบบรวมข้อมูลก่อนส่งแทน
+      legacyServer = /unknown action/i.test(err.message || "");
+    }
+  }
+
+  if (!remote) {
+    try {
+      remote = await loadFromSheet(endpoint);
+    } catch (err) {
+      error = error || err;
+    }
+  }
+
+  if (remote) {
+    // เอาข้อมูลชีตล่าสุดเป็นฐาน แล้วใส่การเปลี่ยนแปลงของเครื่องนี้ที่ยังไม่ขึ้นชีตทับลงไป
+    const pending = pushAll
+      ? pushAllOps(currentSnapshot())
+      : baseAtStart
+        ? diffOps(baseAtStart, currentSnapshot())
+        : firstRunOps(remote);
+    const merged = applyOpsLocal(remote, pending);
+
+    if (legacyServer && pending.length) {
+      try {
+        const updatedAt = new Date().toISOString();
+        await postToSheet(endpoint, { action: "saveAll", data: { version: 1, updatedAt, ...merged } });
+        remote = { ...merged, updatedAt };
+        error = null;
+      } catch (err) {
+        error = err;
+      }
+    }
+
+    // ระหว่างรอเน็ต ผู้ใช้อาจแก้ข้อมูลเพิ่ม → ใส่ซ้ำอีกรอบก่อนแทนค่าในเครื่อง
+    const latestPending = pushAll || !baseAtStart ? pending : diffOps(baseAtStart, currentSnapshot());
+    const finalState = applyOpsLocal(remote, latestPending);
+    state.expenses = finalState.expenses;
+    state.recurring = finalState.recurring;
+    state.budget = finalState.budget || state.budget;
+    saveSyncBase({ expenses: remote.expenses, recurring: remote.recurring, budget: remote.budget, updatedAt: remote.updatedAt });
+    saveLocalSnapshot();
+    renderAll();
+  }
+
+  const stillPending = syncBase ? diffOps(syncBase, currentSnapshot()).length : 0;
+  if (error) {
+    setSyncStatus(
+      `${error.message || "ซิงก์ไม่สำเร็จ"}${stillPending ? ` — มี ${stillPending} รายการรอส่ง ระบบจะลองใหม่อัตโนมัติ` : ""}`,
+      "error",
+    );
+    if (stillPending) scheduleSyncRetry(true);
+    return;
+  }
+
+  syncRetryDelay = 0;
+  if (stillPending) {
+    scheduleSyncRetry(false);
+  } else if (!silent || remote) {
+    const when = remote?.updatedAt ? ` (${new Date(remote.updatedAt).toLocaleString("th-TH")})` : "";
+    setSyncStatus(`${ops.length ? "บันทึกขึ้นชีตแล้ว" : "โหลดข้อมูลสำเร็จ"}${when}`, "good");
+  }
+}
+
+function syncFromSheet() {
+  if (!state.syncEndpoint) {
+    openSync();
+    setSyncStatus("ใส่ลิงก์ Web App ก่อนโหลดข้อมูล", "error");
+    return Promise.resolve();
+  }
+  return runSync({ silent: false });
+}
+
+function syncToSheet({ silent = false } = {}) {
+  if (!state.syncEndpoint) return Promise.resolve();
+  return runSync({ silent });
 }
 
 let autoSyncTimer = null;
@@ -1198,13 +1403,17 @@ let initialSyncDone = false;
 
 function queueAutoSync() {
   if (!state?.syncEndpoint) return;
-  // กันข้อมูลหาย: ยังไม่ให้ส่งขึ้นชีตอัตโนมัติ จนกว่าจะโหลดข้อมูลล่าสุดจากชีตเสร็จก่อน
+  // รอบแรกตอนเปิดแอปจะเก็บการแก้ไขที่ค้างให้เองหลังโหลดเสร็จ
   if (!initialSyncDone) return;
   window.clearTimeout(autoSyncTimer);
   autoSyncTimer = window.setTimeout(() => {
     syncToSheet({ silent: true });
   }, 900);
 }
+
+window.addEventListener("online", () => {
+  if (state.syncEndpoint && initialSyncDone) runSync({ silent: true });
+});
 
 document.querySelectorAll(".add-expense-button, .add-expense-link").forEach((button) => {
   button.addEventListener("click", (event) => {
@@ -1452,7 +1661,7 @@ document.querySelector("[data-sync-upload]")?.addEventListener("click", () => {
     setSyncStatus("ใส่ลิงก์ Web App ก่อนบันทึกขึ้นชีต", "error");
     return;
   }
-  syncToSheet();
+  runSync({ silent: false, pushAll: true });
 });
 
 document.querySelectorAll("[data-clear-data]").forEach((button) => {
@@ -1548,7 +1757,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=44").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=45").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
