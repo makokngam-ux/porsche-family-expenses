@@ -185,6 +185,11 @@ function loadAll_() {
 }
 
 function cellText_(value, pattern) {
+  // ข้อมูลเก่าบางแถวถูกบันทึกเป็นเวลา UTC เช่น "2027-12-31T17:00:00.000Z" (= ม.ค. 2028 เวลาไทย) → แปลงกลับ
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    const parsed = new Date(value);
+    if (!isNaN(parsed.getTime())) value = parsed;
+  }
   if (value instanceof Date) {
     return Utilities.formatDate(value, spreadsheet_().getSpreadsheetTimeZone(), pattern);
   }
