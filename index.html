@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="app-icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=45" />
+    <link rel="stylesheet" href="styles.css?v=46" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -370,7 +370,7 @@
         <div class="modal-title">
           <div>
             <h2 id="modal-title" data-modal-heading>เพิ่มรายจ่าย</h2>
-            <p>เมื่อบันทึก หน้าสรุปจะอัปเดตทันที</p>
+            <p>บันทึกแล้วจะส่งขึ้น Google Sheets ให้อัตโนมัติ</p>
           </div>
           <button class="close-modal" type="button" aria-label="ปิด">×</button>
         </div>
@@ -378,7 +378,7 @@
           <input name="id" type="hidden" />
           <label>
             รายการ
-            <input name="title" type="text" placeholder="เช่น ซื้อของเข้าบ้าน" required />
+            <input name="title" type="text" maxlength="200" placeholder="เช่น ซื้อของเข้าบ้าน" required />
           </label>
           <label>
             หมวดหมู่
@@ -407,7 +407,7 @@
             </label>
           </div>
           <div class="form-actions">
-            <button class="ghost-button" type="button" data-clear-data>ล้างข้อมูลทั้งหมด</button>
+            <button class="ghost-button" type="button" data-close-panels>ยกเลิก</button>
             <button class="save-button" type="submit" data-submit-label>บันทึก</button>
           </div>
         </form>
@@ -429,7 +429,8 @@
           <button type="button" data-nav="records"><span class="action-ic"><svg class="svg-icon"><use href="#i-list"></use></svg></span>ดูรายการทั้งหมด</button>
           <button type="button" data-nav="analysis"><span class="action-ic"><svg class="svg-icon"><use href="#i-chart"></use></svg></span>ดูรายงาน</button>
           <button type="button" data-open-sync><span class="action-ic"><svg class="svg-icon"><use href="#i-cloud"></use></svg></span>ซิงก์ Google Sheets</button>
-          <button type="button" data-export-csv><span class="action-ic"><svg class="svg-icon"><use href="#i-download"></use></svg></span>ส่งออก CSV</button>
+          <button type="button" data-export-csv><span class="action-ic"><svg class="svg-icon"><use href="#i-download"></use></svg></span>ส่งออก CSV เดือนนี้</button>
+          <button type="button" data-export-csv="all"><span class="action-ic"><svg class="svg-icon"><use href="#i-download"></use></svg></span>สำรองรายจ่ายทั้งหมด</button>
           <button type="button" class="action-danger" data-clear-data><span class="action-ic"><svg class="svg-icon"><use href="#i-trash"></use></svg></span>ล้างข้อมูลทั้งหมด</button>
         </div>
       </div>
@@ -485,7 +486,7 @@
           </label>
           <label>
             ชื่อรายการ
-            <input name="title" type="text" placeholder="เช่น ค่าน้ำ ค่าไฟ ค่าอินเทอร์เน็ต" required />
+            <input name="title" type="text" maxlength="200" placeholder="เช่น ค่าน้ำ ค่าไฟ ค่าอินเทอร์เน็ต" required />
           </label>
           <label>
             หมวดหมู่
@@ -563,6 +564,10 @@
             ลิงก์ Google Apps Script Web App
             <input name="endpoint" type="url" placeholder="https://script.google.com/macros/s/..." />
           </label>
+          <label>
+            รหัสผ่านซิงก์ (ถ้าตั้งไว้ใน Apps Script)
+            <input name="syncKey" type="password" autocomplete="off" placeholder="เว้นว่างได้ถ้ายังไม่ได้ตั้ง" />
+          </label>
           <div class="sync-status" data-sync-status>ยังไม่ได้เชื่อม Google Sheets</div>
           <div class="sync-actions">
             <button class="ghost-button" type="button" data-sync-download>โหลดจากชีต</button>
@@ -575,6 +580,6 @@
         </form>
       </div>
     </div>
-    <script src="app.js?v=45"></script>
+    <script src="app.js?v=46"></script>
   </body>
 </html>
