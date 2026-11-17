@@ -4,7 +4,8 @@
 // - เพิ่ม action "applyOps": แอปส่งเฉพาะรายการที่เพิ่ม/แก้/ลบ แล้วสคริปต์รวมเข้ากับข้อมูลในชีตภายใต้ล็อกเดียว
 //   (เครื่องที่ข้อมูลเก่าจะไม่ทับรายการของเครื่องอื่นอีก)
 // - การอ่าน (loadAll) รอคิวเดียวกับการเขียน จึงไม่มีทางอ่านเจอชีตที่กำลังเขียนค้างอยู่
-// - เขียนทับโดยไม่ล้างชีตก่อน และตรวจข้อมูลให้ครบก่อนแตะชีต
+// - เขียนทับโดยไม่ล้างชีตก่อน เขียนเฉพาะแท็บที่เปลี่ยน และแถวที่ไม่ได้แก้ถูกเขียนกลับด้วยค่าดิบเดิม
+// - เปิดไฟล์ชีตครั้งเดียวต่อคำขอ (รุ่นก่อนเปิดใหม่ทุกแถว ทำให้อ่านครั้งละ 15 วินาที บันทึกเกือบนาที)
 // - ชื่อรายการเขียนเป็นข้อความล้วน (กันสูตร) และวันที่อ่านกลับตามเขตเวลาของชีต
 // - ไม่ตั้งรูปแบบเซลล์ (setNumberFormat) เพราะแท็บ expenses เป็น "ตาราง" ที่กำหนดชนิดคอลัมน์ไว้ ซึ่ง Sheets ไม่ยอม
 // - ยกเลิกการบันทึกผ่าน GET และยกเลิกการ "เขียนทับทั้งชุด" (saveAll) ของแอปเวอร์ชันเก่า
@@ -54,7 +55,7 @@ function doPost(event) {
       const data = withLock_(function () {
         return applyOps_(ops);
       });
-      return output_(event, { ok: true, updatedAt: data.updatedAt, data: data });
+      return output_(event, { ok: true, updatedAt: data.updatedAt, skipped: ops.skipped, data: data });
     }
 
     if (body.action === "saveAll") {
@@ -105,7 +106,7 @@ function validateOps_(ops) {
     try {
       record = clean(item);
     } catch (error) {
-      // รายการที่ข้อมูลไม่ครบ (ไม่มีชื่อ/วันที่ผิด) ข้ามไป ไม่ให้ทั้งชุดค้างเพราะรายการเดียว
+      // ข้ามได้กรณีเดียวคือไม่มีรหัสรายการ (ไม่มีทางอ้างถึงได้) — นับไว้และรายงานกลับ
       result.skipped += 1;
       return;
     }
@@ -166,10 +167,9 @@ function cleanText_(value, maxLength) {
 
 function cleanExpense_(item) {
   if (!item || typeof item !== "object") throw new Error("Invalid expense");
+  // ไม่ปฏิเสธรายการเพราะข้อมูลไม่สมบูรณ์ (แอปตรวจก่อนส่งแล้ว) — รายการเก่าที่วันที่/ชื่อแปลกต้องไม่หายเงียบ ๆ
   const date = cleanText_(item.date, 10);
-  if (!validDate_(date)) throw new Error("Invalid expense date");
-  const title = cleanText_(item.title, 200).trim();
-  if (!title) throw new Error("Expense title is empty");
+  const title = cleanText_(item.title, 200).trim() || "(ไม่มีชื่อ)";
   return {
     id: cleanId_(item.id),
     title: title,
@@ -182,8 +182,7 @@ function cleanExpense_(item) {
 
 function cleanRecurring_(item) {
   if (!item || typeof item !== "object") throw new Error("Invalid recurring item");
-  const title = cleanText_(item.title, 200).trim();
-  if (!title) throw new Error("Recurring title is empty");
+  const title = cleanText_(item.title, 200).trim() || "(ไม่มีชื่อ)";
   const end = cleanText_(item.end, 7);
   return {
     id: cleanId_(item.id),
@@ -209,19 +208,53 @@ function cleanBudget_(budget) {
 
 // ---------- รวมรายการที่เปลี่ยนเข้ากับข้อมูลในชีต ----------
 
+// หลักการเขียน: แถวที่ไม่ได้ถูกแก้ จะถูกเขียนกลับด้วย "ค่าดิบ" ตามที่อ่านมาจากชีตทุกประการ (ชนิดข้อมูลเดิม)
+// เฉพาะแถวที่เพิ่ม/แก้เท่านั้นที่สร้างค่าใหม่ และแท็บที่ไม่มีการเปลี่ยนแปลงจะไม่ถูกเขียนเลย
 function applyOps_(ops) {
-  const current = loadAll_();
-  const merged = {
-    expenses: mergeList_(current.expenses, ops.expenses),
-    recurring: mergeList_(current.recurring, ops.recurring),
-    budget: ops.budget || current.budget,
-  };
-  const updatedAt = writeAll_(merged);
-  merged.updatedAt = updatedAt;
-  return merged;
+  ensureSheets_();
+  const touchedExpenses = ops.expenses.upserts.length + ops.expenses.deletes.length > 0;
+  const touchedRecurring = ops.recurring.upserts.length + ops.recurring.deletes.length > 0;
+
+  if (touchedExpenses) {
+    writeRows_("expenses", mergeRawRows_(readRows_("expenses"), ops.expenses, expenseRow_, "expenses"));
+  }
+  if (touchedRecurring) {
+    writeRows_("recurring", mergeRawRows_(readRows_("recurring"), ops.recurring, recurringRow_, "recurring"));
+  }
+  if (ops.budget) {
+    const categoryBudget = ops.budget.categories || {};
+    writeRows_("budget", [["total", Number(ops.budget.total || 0)]].concat(
+      Object.keys(categoryBudget).map(function (key) {
+        return [lit_(key), Number(categoryBudget[key] || 0)];
+      }),
+    ));
+  }
+  if (touchedExpenses || touchedRecurring || ops.budget) {
+    writeRows_("meta", [["updatedAt", new Date().toISOString()]]);
+  }
+  SpreadsheetApp.flush();
+  return loadAll_();
 }
 
-function mergeList_(list, group) {
+function expenseRow_(item) {
+  return [item.id, litTitle_(item.title), lit_(item.category || "other"), Number(item.amount || 0), item.date, item.recurringId];
+}
+
+function recurringRow_(item) {
+  return [
+    item.id,
+    litTitle_(item.title),
+    lit_(item.category || "other"),
+    Number(item.amount || 0),
+    Number(item.day || 1),
+    item.freq || "monthly",
+    item.month || "",
+    item.end || "",
+  ];
+}
+
+// rawRows: แถวดิบจากชีต (ไม่รวมหัวตาราง) → คืนแถวดิบชุดใหม่หลังลบ/แก้/เพิ่ม
+function mergeRawRows_(rawRows, group, toRow, kind) {
   // Object.create(null): รหัสอย่าง "constructor" ต้องไม่ไปชนกับของที่ติดมากับ object ปกติ
   const deleted = Object.create(null);
   group.deletes.forEach(function (id) {
@@ -232,57 +265,34 @@ function mergeList_(list, group) {
     upserts[String(item.id)] = item;
   });
 
-  const used = Object.create(null);
+  const placed = Object.create(null);
   const result = [];
-  list.forEach(function (item) {
-    const key = String(item.id);
-    // รหัสซ้ำในชีต (เช่น เขียนค้างครึ่งทางรอบก่อน) เก็บไว้แถวเดียว
-    if (deleted[key] || used[key]) return;
-    used[key] = true;
-    result.push(upserts[key] || item);
+  let position = 0; // นับเฉพาะแถวที่ไม่ว่าง ให้ตรงกับรหัสสำรองที่ loadAll_ ตั้งให้แถวที่ไม่มีรหัส
+  rawRows.forEach(function (row) {
+    if (!notBlankRow_(row)) return;
+    const key = String(rowId_(row[0], (kind === "expenses" ? "row" : "rrow") + (position + 2)));
+    position += 1;
+    if (deleted[key]) return;
+    if (upserts[key]) {
+      // แถวที่ถูกแก้: แทนที่ ณ ตำแหน่งเดิม (ถ้ารหัสนี้ซ้ำหลายแถว เก็บแถวที่แก้แล้วแถวเดียว)
+      if (!placed[key]) result.push(toRow(upserts[key]));
+      placed[key] = true;
+      return;
+    }
+    // แถวที่ไม่ได้แตะ: ค่าดิบเดิมทุกช่อง (วันที่ยังเป็นวันที่ ตัวเลขยังเป็นตัวเลข)
+    // ยกเว้นข้อความที่ขึ้นต้นด้วย = + - @ ต้องเติม ' ไม่งั้นชีตจะตีความเป็นสูตรตอนเขียนกลับ
+    result.push(row.map(lit_));
   });
   // รายการใหม่ไว้บนสุด
   const added = [];
   group.upserts.forEach(function (item) {
     const key = String(item.id);
-    if (!used[key] && !deleted[key]) {
-      used[key] = true;
-      added.push(upserts[key]);
+    if (!placed[key] && !deleted[key]) {
+      placed[key] = true;
+      added.push(toRow(upserts[key]));
     }
   });
   return added.concat(result);
-}
-
-function writeAll_(data) {
-  const updatedAt = new Date().toISOString();
-  const budget = data.budget || { total: 0, categories: {} };
-  const categoryBudget = budget.categories || {};
-
-  writeRows_("expenses", data.expenses.map(function (item) {
-    return [item.id, item.title, item.category || "other", Number(item.amount || 0), item.date, item.recurringId];
-  }));
-
-  writeRows_("budget", [["total", Number(budget.total || 0)]].concat(
-    Object.keys(categoryBudget).map(function (key) {
-      return [key, Number(categoryBudget[key] || 0)];
-    }),
-  ));
-
-  writeRows_("recurring", data.recurring.map(function (item) {
-    return [
-      item.id,
-      item.title,
-      item.category || "other",
-      Number(item.amount || 0),
-      Number(item.day || 1),
-      item.freq || "monthly",
-      item.month || "",
-      item.end || "",
-    ];
-  }));
-
-  writeRows_("meta", [["updatedAt", updatedAt]]);
-  return updatedAt;
 }
 
 function loadAll_() {
@@ -383,12 +393,6 @@ function writeRows_(kind, rows) {
   const sheet = sheet_(kind);
   const width = HEADERS[kind].length;
   const previousLastRow = sheet.getLastRow();
-  const titleColumn = HEADERS[kind].indexOf("title");
-  rows = rows.map(function (row) {
-    return row.map(function (cell, index) {
-      return index === titleColumn ? litTitle_(cell) : lit_(cell);
-    });
-  });
 
   // ชีตต้องมีแถวพอก่อนเขียน (ถ้าเพิ่มแถวเองไม่ได้ ปล่อยให้ setValues จัดการตามเดิม)
   try {
@@ -398,15 +402,12 @@ function writeRows_(kind, rows) {
     }
   } catch (error) {}
 
-  sheet.getRange(1, 1, 1, width).setValues([HEADERS[kind]]);
-  if (rows.length) {
-    sheet.getRange(2, 1, rows.length, width).setValues(rows);
-  }
-  // ลบเฉพาะแถวส่วนเกินด้านล่าง หลังจากเขียนข้อมูลใหม่เสร็จแล้ว (ไม่ล้างทั้งชีตก่อนเขียน)
-  const firstExtraRow = rows.length + 2;
-  if (previousLastRow >= firstExtraRow) {
-    // ล้างเฉพาะคอลัมน์ของแอป ไม่แตะคอลัมน์อื่นที่ผู้ใช้จดเพิ่มเองในชีต
-    sheet.getRange(firstExtraRow, 1, previousLastRow - firstExtraRow + 1, width).clearContent();
+  // เขียนหัวตารางและข้อมูลในคำสั่งเดียว (แบบเดียวกับสคริปต์รุ่นก่อนที่ใช้กับชีตนี้อยู่)
+  const values = [HEADERS[kind]].concat(rows);
+  sheet.getRange(1, 1, values.length, width).setValues(values);
+  // ลบเฉพาะแถวส่วนเกินด้านล่าง หลังจากเขียนข้อมูลใหม่เสร็จแล้ว และเฉพาะคอลัมน์ของแอป
+  if (previousLastRow > values.length) {
+    sheet.getRange(values.length + 1, 1, previousLastRow - values.length, width).clearContent();
   }
 }
 
