@@ -1694,3 +1694,18 @@ select:focus {
   .brand h1 { font-size: 21px; }
   .brand p { display: none; }
 }
+
+/* ===== v48 ===== */
+.quick-pick { min-height: 40px; }
+.quick-pick small { margin-left: 4px; font-size: 11px; font-weight: 600; color: #b98a9a; }
+.alert-list li .small-pill { margin-left: auto; align-self: center; }
+/* iPhone ซูมหน้าจอเองเมื่อช่องกรอกเล็กกว่า 16px */
+@media (max-width: 860px) {
+  .entry-modal input, .entry-modal select { font-size: 16px; }
+}
+/* ขณะเปิดฟอร์ม ย้ายป้ายสถานะขึ้นด้านบนและอยู่เหนือฟอร์ม จะได้เห็นว่าส่งขึ้นชีตแล้วหรือยัง */
+body:has(.entry-modal.open) .sync-badge {
+  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  bottom: auto;
+  z-index: 30;
+}
