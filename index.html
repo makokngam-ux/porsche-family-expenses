@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="app-icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=46" />
+    <link rel="stylesheet" href="styles.css?v=47" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -376,6 +376,8 @@
         </div>
         <form data-expense-form>
           <input name="id" type="hidden" />
+          <p class="saved-note" data-saved-note hidden></p>
+          <div class="quick-picks" data-quick-picks hidden aria-label="รายการที่จดบ่อย"></div>
           <label>
             รายการ
             <input name="title" type="text" maxlength="200" placeholder="เช่น ซื้อของเข้าบ้าน" required />
@@ -410,6 +412,7 @@
             <button class="ghost-button" type="button" data-close-panels>ยกเลิก</button>
             <button class="save-button" type="submit" data-submit-label>บันทึก</button>
           </div>
+          <button class="ghost-button save-again" type="submit" data-save-again>บันทึกและเพิ่มต่อ</button>
         </form>
       </div>
     </div>
@@ -580,6 +583,6 @@
         </form>
       </div>
     </div>
-    <script src="app.js?v=46"></script>
+    <script src="app.js?v=47"></script>
   </body>
 </html>
