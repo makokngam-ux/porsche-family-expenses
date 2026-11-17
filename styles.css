@@ -621,6 +621,8 @@ small {
 .transaction-list b {
   font-size: 13px;
   line-height: 1.1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .transaction-list small {
@@ -1583,3 +1585,28 @@ select:focus {
   height: auto;
   display: block;
 }
+
+/* ป้ายสถานะซิงก์ Google Sheets */
+.sync-badge {
+  position: fixed;
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  transform: translateX(-50%);
+  z-index: 60;
+  max-width: min(92vw, 380px);
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #5b4e53;
+  background: #fff;
+  box-shadow: 0 6px 20px rgba(120, 60, 80, 0.22);
+  cursor: pointer;
+}
+.sync-badge[hidden] { display: none; }
+.sync-badge[data-tone="good"] { color: #177a55; background: #e6f8f0; }
+.sync-badge[data-tone="error"] { color: #b3261e; background: #ffe9e6; }
+.sync-badge[data-tone="busy"] { color: #8a5a00; background: #fff4d6; }
