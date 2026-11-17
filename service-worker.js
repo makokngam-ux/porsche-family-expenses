@@ -1,9 +1,9 @@
-const cacheName = "porsche-family-expenses-v45";
+const cacheName = "porsche-family-expenses-v46";
 const files = [
   "./",
   "./index.html",
-  "./styles.css",
-  "./app.js",
+  "./styles.css?v=46",
+  "./app.js?v=46",
   "./manifest.webmanifest",
   "./icon.svg",
   "./app-icon-192.png",
@@ -12,7 +12,6 @@ const files = [
   "./apple-touch-icon.png",
   "./favicon-32.png",
   "./family-porsche.jpg",
-  "./google-apps-script.gs",
 ];
 
 self.addEventListener("install", (event) => {
@@ -33,12 +32,14 @@ self.addEventListener("activate", (event) => {
 // network-first: โหลดไฟล์ล่าสุดจากเน็ตเสมอเมื่อออนไลน์ แล้วค่อย fallback ไป cache ตอนออฟไลน์
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  // ไม่ยุ่งกับคำขอไปโดเมนอื่น (Google Sheets, ฟอนต์) — ไม่เก็บข้อมูลครอบครัวลง cache
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     (async () => {
       try {
         const response = await fetch(event.request);
         const cache = await caches.open(cacheName);
-        cache.put(event.request, response.clone()).catch(() => {});
+        if (response.ok) cache.put(event.request, response.clone()).catch(() => {});
         return response;
       } catch (error) {
         const cached = await caches.match(event.request);
