@@ -254,8 +254,6 @@ function importOldSyncBase() {
   }
   if (!base || !Array.isArray(base.expenses) || !Array.isArray(base.recurring)) return;
   // ข้อมูลในเครื่องว่างทั้งที่ชีตเคยมีรายการ = ข้อมูลในเครื่องหาย ไม่ใช่ผู้ใช้ลบเอง → ไม่ตีความว่าเป็นการลบ
-  const localLooksLost = (kind) => state[kind].length === 0 && base[kind].length > 0;
-  const hadPending = pendingCount() > 0;
   const text = (value) => String(value ?? "");
   const shape = {
     expenses: (i) => [text(i.title), text(i.category), Number(i.amount || 0), toISODate(i.date), text(i.recurringId)].join("|"),
@@ -274,12 +272,10 @@ function importOldSyncBase() {
         // รายการที่อยู่ในคิวอยู่แล้ว (ใหม่กว่า) ไม่แตะ
         if (!alreadyQueued(id) && baseMap.get(id) !== shape[kind](item) && item.title) markUpsert(kind, item);
       });
-      if (localLooksLost(kind)) return;
-      baseMap.forEach((_, id) => {
-        if (!localIds.has(id) && !alreadyQueued(id)) markDelete(kind, id);
-      });
+      // ไม่ตีความ "รายการที่ไม่มีในเครื่อง" ว่าเป็นการลบ — แยกไม่ได้ว่าผู้ใช้ลบเองหรือข้อมูลในเครื่องหายบางส่วน
+      // (ถ้าเคยลบไว้แล้วยังไม่ได้ส่ง รายการจะกลับมาจากชีต ต้องลบซ้ำ ซึ่งปลอดภัยกว่าลบผิด)
     });
-    if (!hadPending && base.budget && budgetShape(base.budget) !== budgetShape(state.budget)) markBudget(state.budget);
+    if (!pending.budget && base.budget && budgetShape(base.budget) !== budgetShape(state.budget)) markBudget(state.budget);
   });
   // เขียนคิวลงเครื่องไม่สำเร็จ → ยังไม่ถือว่าย้ายเสร็จ เก็บข้อมูลเดิมไว้ลองใหม่รอบหน้า
   if (pendingUnsaved) return;
@@ -1177,16 +1173,25 @@ function openModal(item = null) {
     document.querySelector("[data-submit-label]").textContent = "บันทึก";
     const lastCategory = readStored(lastCategoryStorageKey);
     if (form && lastCategory && categories[lastCategory]) form.elements.category.value = lastCategory;
-    // ดูเดือนปัจจุบันอยู่ → วันนี้ / ดูเดือนย้อนหลังอยู่ → วันเดียวกันของเดือนนั้น (ไว้กรอกย้อนหลัง)
-    if (dateInput) dateInput.value = state.month === currentMonthKey() ? todayKey() : selectedMonthDate(new Date().getDate());
+    // รายการใหม่ลงวันที่ "วันนี้" เสมอ ไม่ว่ากำลังดูเดือนไหนอยู่ (จดย้อนหลังให้เลือกวันเองหรือกด "เมื่อวาน")
+    if (dateInput) dateInput.value = todayKey();
+    restoreEntryDraft(form);
   }
+  syncDateChips();
 
   renderQuickPicks(!item);
+  amountFromPick = false;
+  saveAgainClicked = false;
+  document.body.classList.add("entry-open");
   document.querySelectorAll("[data-save-again]").forEach((button) => {
     button.hidden = Boolean(item);
   });
   const note = document.querySelector("[data-saved-note]");
-  if (note) note.hidden = true;
+  if (note) {
+    note.textContent = pendingDraftNote;
+    note.hidden = !pendingDraftNote;
+  }
+  pendingDraftNote = "";
 
   modal?.classList.add("open");
   modal?.setAttribute("aria-hidden", "false");
@@ -1196,7 +1201,7 @@ function openModal(item = null) {
 const lastCategoryStorageKey = "porsche-family-last-category";
 
 // Safari รุ่นก่อน 15.4 ไม่บอกว่าปุ่มไหนถูกกดตอนส่งฟอร์ม → จำเองจากการคลิก
-let saveAgainClicked = false;
+var saveAgainClicked = false;
 document.querySelector("[data-expense-form]")?.addEventListener("click", (event) => {
   saveAgainClicked = Boolean(event.target.closest("[data-save-again]"));
 });
@@ -1218,6 +1223,10 @@ function frequentEntries(limit = 6) {
 }
 
 let quickPicks = [];
+let amountFromPick = false;
+document.querySelector("[data-expense-form] [name='amount']")?.addEventListener("input", () => {
+  amountFromPick = false;
+});
 function renderQuickPicks(show) {
   const box = document.querySelector("[data-quick-picks]");
   if (!box) return;
@@ -1238,13 +1247,129 @@ document.querySelector("[data-quick-picks]")?.addEventListener("click", (event) 
   if (!entry || !form) return;
   form.elements.title.value = entry.title;
   if (categories[entry.category]) form.elements.category.value = entry.category;
-  // ถ้าพิมพ์จำนวนเงินไว้แล้ว ไม่เขียนทับ
-  if (!form.elements.amount.value) form.elements.amount.value = entry.amount || "";
+  // จำนวนเงินที่ผู้ใช้พิมพ์เองไม่เขียนทับ แต่ถ้าเป็นค่าที่ปุ่มลัดอื่นเติมไว้ ให้เปลี่ยนตามปุ่มที่แตะล่าสุด
+  if (!form.elements.amount.value || amountFromPick) {
+    form.elements.amount.value = entry.amount || "";
+    amountFromPick = true;
+  }
   form.elements.amount.focus();
   form.elements.amount.select();
 });
 
+// ===== วันที่แบบแตะครั้งเดียว: วันนี้ / เมื่อวาน =====
+function dayKeyAgo(days) {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function syncDateChips() {
+  const value = document.querySelector("[data-expense-form]")?.elements.date.value;
+  document.querySelectorAll("[data-date-chip]").forEach((chip) => {
+    chip.classList.toggle("is-active", value === dayKeyAgo(Number(chip.dataset.dateChip)));
+  });
+}
+
+document.querySelectorAll("[data-date-chip]").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    const form = document.querySelector("[data-expense-form]");
+    if (!form) return;
+    form.elements.date.value = dayKeyAgo(Number(chip.dataset.dateChip));
+    syncDateChips();
+    saveEntryDraft();
+  });
+});
+document.querySelector("[data-expense-form] [name='date']")?.addEventListener("change", syncDateChips);
+
+// ===== จำสิ่งที่พิมพ์ค้างไว้ (เฉพาะรายการใหม่) เผื่อแอปถูกปิดหรือรีโหลดกลางคัน =====
+const entryDraftStorageKey = "porsche-family-entry-draft";
+
+function saveEntryDraft() {
+  const form = document.querySelector("[data-expense-form]");
+  if (!form || form.elements.id.value) return; // โหมดแก้ไขไม่เก็บร่าง
+  const draft = {
+    title: form.elements.title.value,
+    category: form.elements.category.value,
+    amount: form.elements.amount.value,
+    date: form.elements.date.value,
+    savedOn: todayKey(),
+  };
+  if (draft.title.trim() || draft.amount) writeStored(entryDraftStorageKey, JSON.stringify(draft));
+  else clearEntryDraft();
+}
+
+function clearEntryDraft() {
+  try {
+    localStorage.removeItem(entryDraftStorageKey);
+  } catch {
+    // ไม่มีร่างให้ลบ
+  }
+}
+
+function restoreEntryDraft(form) {
+  let draft = null;
+  try {
+    draft = JSON.parse(readStored(entryDraftStorageKey) || "null");
+  } catch {
+    draft = null;
+  }
+  if (!form || !draft || typeof draft !== "object" || !(String(draft.title || "").trim() || draft.amount)) return;
+  form.elements.title.value = String(draft.title || "");
+  if (categories[draft.category]) form.elements.category.value = draft.category;
+  form.elements.amount.value = draft.amount || "";
+  // ร่างที่ค้างข้ามวัน: คงวันที่ที่เลือกไว้ตอนพิมพ์ และบอกให้เห็นชัด
+  if (isValidDate(draft.date)) form.elements.date.value = draft.date;
+  pendingDraftNote = draft.date !== todayKey() ? `กู้สิ่งที่พิมพ์ค้างไว้ให้แล้ว · ลงวันที่ ${formatDate(draft.date)}` : "กู้สิ่งที่พิมพ์ค้างไว้ให้แล้ว";
+}
+let pendingDraftNote = "";
+
+document.querySelector("[data-expense-form]")?.addEventListener("input", saveEntryDraft);
+document.querySelector("[data-expense-form]")?.addEventListener("change", saveEntryDraft);
+
+// ===== เลิกทำรายการที่เพิ่งเพิ่ม =====
+let lastAddedId = null;
+let undoToastTimer = null;
+
+function showUndoToast(record) {
+  let toast = document.querySelector("[data-undo-toast]");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.className = "undo-toast";
+    toast.dataset.undoToast = "";
+    toast.innerHTML = `<span data-undo-text></span><button type="button" data-undo-last>เลิกทำ</button>`;
+    document.body.appendChild(toast);
+  }
+  toast.querySelector("[data-undo-text]").textContent = `บันทึก “${record.title}” ฿${money.format(record.amount)} แล้ว`;
+  toast.hidden = false;
+  window.clearTimeout(undoToastTimer);
+  undoToastTimer = window.setTimeout(() => {
+    toast.hidden = true;
+  }, 7000);
+}
+
+// เลิกทำ = ลบรายการที่เพิ่งเพิ่ม ด้วยคำสั่งลบปกติ (ถ้ากำลังส่งขึ้นชีตอยู่ คำสั่งลบจะตามไปทีหลัง)
+function undoLastAdd() {
+  const id = lastAddedId;
+  lastAddedId = null;
+  document.querySelectorAll("[data-undo-toast]").forEach((toast) => {
+    toast.hidden = true;
+  });
+  const note = document.querySelector("[data-saved-note]");
+  if (id === null || !state.expenses.some((item) => String(item.id) === String(id))) return;
+  state.expenses = state.expenses.filter((item) => String(item.id) !== String(id));
+  queueChange(() => markDelete("expenses", id));
+  commitChange();
+  renderAll();
+  if (note && !note.hidden) note.textContent = "เลิกทำรายการล่าสุดแล้ว";
+}
+
+document.body.addEventListener("click", (event) => {
+  if (event.target.closest("[data-undo-last]")) undoLastAdd();
+});
+
 function closeModal() {
+  clearEntryDraft();
+  document.body.classList.remove("entry-open");
   const modal = document.querySelector("[data-entry-modal]");
   modal?.classList.remove("open");
   modal?.setAttribute("aria-hidden", "true");
@@ -1681,7 +1806,8 @@ function rescueUnsyncedOnce(remote) {
 // รายการส่วนใหญ่ของเครื่องนี้หายไปจากชีตพร้อมกัน (เช่น ชีตถูกล้าง ถูกสลับไฟล์ หรือเพิ่งเชื่อมชีตใหม่)
 // → ยังไม่ทับข้อมูลในเครื่อง ให้ผู้ใช้เลือกเองว่าจะส่งขึ้นไป หรือจะลบในเครื่องตามชีต
 let remoteHold = null;
-let forceAdoptNext = false;
+let forceAdoptRequested = false; // ผู้ใช้ยืนยันแล้ว รอรอบซิงก์ที่ "เริ่มหลัง" การยืนยัน
+let forceAdoptNext = false; // รอบซิงก์ปัจจุบันได้รับอนุญาตให้ทับข้อมูลในเครื่อง
 function looksWiped(remote, sent = pending) {
   // ไม่นับรายการที่ยังอยู่ในคิวหรือเพิ่งส่งไปในรอบนี้ (ชีตย่อมยังไม่มี หรือเพิ่งมีเพราะเราส่งเอง)
   const queued = { ...sent.expenses.upserts, ...pending.expenses.upserts };
@@ -1711,7 +1837,7 @@ function resolveRemoteHold() {
   if (!window.confirm(`ลบรายจ่าย ${hold.localCount} รายการออกจากเครื่องนี้ ให้ตรงกับ Google Sheets ใช่ไหม? (กู้คืนไม่ได้)`)) return;
   // โหลดข้อมูลล่าสุดอีกครั้งก่อนลบในเครื่อง (ข้อมูลที่ถือไว้อาจเก่าไปแล้วระหว่างที่ผู้ใช้ตัดสินใจ)
   remoteHold = null;
-  forceAdoptNext = true;
+  forceAdoptRequested = true;
   runSync({ manual: true });
 }
 
@@ -1776,7 +1902,13 @@ function runSync(options) {
     return run(); // เบราว์เซอร์รุ่นเก่าที่ไม่รองรับตัวเลือกนี้
   }
   return request
-    .catch((error) => (error?.name === "AbortError" || error?.name === "TimeoutError" ? run() : Promise.reject(error)))
+    .catch((error) => {
+      if (error?.name === "AbortError" || error?.name === "TimeoutError") return run();
+      syncing = false; // ขอคิวไม่สำเร็จด้วยเหตุอื่น: ปลดสถานะ แล้วลองใหม่ภายหลัง
+      refreshSyncBadge();
+      retryTimer = window.setTimeout(() => runSync(), 15000);
+      return undefined;
+    })
     .finally(() => window.clearTimeout(lockTimer));
 }
 
@@ -1784,6 +1916,8 @@ async function syncOnce({ manual = false } = {}) {
   window.clearTimeout(syncTimer);
   window.clearTimeout(retryTimer);
   const endpoint = state.syncEndpoint;
+  forceAdoptNext = forceAdoptRequested;
+  forceAdoptRequested = false;
   reloadPending();
   const sent = clone(pending);
   const pushing = pendingCount(sent) > 0;
@@ -2019,6 +2153,8 @@ document.querySelector("[data-expense-form]")?.addEventListener("submit", (event
   writeStored(lastCategoryStorageKey, String(record.category));
   const again = !existing && (event.submitter ? event.submitter.hasAttribute("data-save-again") : saveAgainClicked);
   saveAgainClicked = false;
+  clearEntryDraft();
+  lastAddedId = existing ? null : record.id;
   if (!queued) {
     // เก็บลงเครื่องไม่ได้ (พื้นที่เต็ม): รายการยังอยู่ในแอปและจะถูกส่งขึ้นชีต แต่ต้องเปิดแอปค้างไว้จนส่งเสร็จ
     window.alert("พื้นที่เก็บข้อมูลของแอปในเครื่องเต็ม รายการนี้ยังไม่ถูกเก็บลงเครื่อง กรุณาเปิดแอปค้างไว้จนป้ายขึ้นว่า “บันทึกขึ้นชีตแล้ว”");
@@ -2032,11 +2168,19 @@ document.querySelector("[data-expense-form]")?.addEventListener("submit", (event
     const note = document.querySelector("[data-saved-note]");
     if (note) {
       const backdated = record.date !== todayKey() ? ` · รายการถัดไปจะลงวันที่ ${formatDate(record.date)} เช่นกัน` : "";
-      note.textContent = `บันทึก “${record.title}” ฿${money.format(record.amount)} แล้ว ✓${backdated}`;
+      note.textContent = `บันทึก “${record.title}” ฿${money.format(record.amount)} แล้ว ✓${backdated} `;
+      const undo = document.createElement("button");
+      undo.type = "button";
+      undo.className = "note-undo";
+      undo.dataset.undoLast = "";
+      undo.textContent = "เลิกทำ";
+      note.appendChild(undo);
       note.hidden = false;
     }
+    syncDateChips();
     return;
   }
+  if (!existing) showUndoToast(record);
   closeModal();
   renderAll();
 });
@@ -2248,7 +2392,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=48").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=49").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
@@ -2336,11 +2480,12 @@ window.addEventListener("pageshow", (e) => {
 
 // อีกแท็บ/หน้าต่างของแอปเดียวกันบันทึกข้อมูล → อ่านค่าล่าสุดมาใช้ ไม่ให้แท็บนี้เขียนข้อมูลเก่าทับ
 window.addEventListener("storage", (event) => {
-  if (![storageKey, budgetStorageKey, recurringStorageKey, pendingStorageKey].includes(event.key)) return;
+  if (![storageKey, budgetStorageKey, recurringStorageKey, pendingStorageKey, skippedBillsStorageKey].includes(event.key)) return;
   state.expenses = loadExpenses();
   state.budget = loadBudget();
   state.recurring = loadRecurring();
-  pending = loadPending();
+  reloadPending();
+  skippedBills = loadSkippedBills();
   renderAll();
   refreshSyncBadge();
 });
