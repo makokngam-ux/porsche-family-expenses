@@ -1590,9 +1590,10 @@ select:focus {
 .sync-badge {
   position: fixed;
   left: 50%;
-  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  /* อยู่เหนือแถบเมนูล่าง ไม่บังหัวข้อของหน้า */
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
   transform: translateX(-50%);
-  z-index: 60;
+  z-index: 18;
   max-width: min(92vw, 380px);
   padding: 8px 14px;
   border: 0;
@@ -1610,3 +1611,86 @@ select:focus {
 .sync-badge[data-tone="good"] { color: #177a55; background: #e6f8f0; }
 .sync-badge[data-tone="error"] { color: #b3261e; background: #ffe9e6; }
 .sync-badge[data-tone="busy"] { color: #8a5a00; background: #fff4d6; }
+
+/* ===== ปรับให้จดประจำวันง่ายขึ้น (v47) ===== */
+
+/* ปุ่มลัดรายการที่จดบ่อย ในฟอร์มเพิ่มรายจ่าย */
+.quick-picks {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 4px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.quick-picks[hidden] { display: none; }
+.quick-picks::-webkit-scrollbar { display: none; }
+.quick-pick {
+  flex: 0 0 auto;
+  min-height: 36px;
+  max-width: 180px;
+  padding: 0 14px;
+  border: 1px solid #ffd3de;
+  border-radius: 999px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #c2496f;
+  background: #fff5f8;
+  cursor: pointer;
+}
+
+.save-again {
+  width: 100%;
+  margin-top: 2px;
+}
+.save-again[hidden] { display: none; }
+
+.saved-note {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #177a55;
+  background: #e6f8f0;
+}
+.saved-note[hidden] { display: none; }
+
+/* แถวเตือนบิล: ปุ่ม "บันทึก" และ "ข้าม" */
+.transaction-list li.due-reminder {
+  grid-template-columns: 34px 1fr auto auto auto;
+}
+.small-pill.is-quiet {
+  color: #a8798a;
+  background: #fbeaf0;
+}
+
+/* หัวข้อวันในรายการทั้งหมด */
+.transaction-list li.day-head {
+  grid-template-columns: 1fr auto auto;
+  min-height: 30px;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: #fff3f6;
+}
+.transaction-list li.day-head b { font-size: 12px; color: #8d6d78; }
+.transaction-list li.day-head span { font-size: 11px; color: #b9a3ab; white-space: nowrap; }
+/* รายการที่จัดกลุ่มตามวันแล้ว ไม่ต้องแสดงวันที่ซ้ำในแต่ละแถว */
+.transaction-list.full-list li:not(.day-head):not(.empty-row) { grid-template-columns: 34px 1fr auto 26px 26px; }
+.transaction-list.full-list li em { display: none; }
+.transaction-list li.day-head strong { font-size: 12px; color: #f45785; width: auto; min-width: max-content; margin-left: 6px; white-space: nowrap; }
+
+/* มือถือ: ย่อรูปครอบครัวให้ยอดรวมและรายการล่าสุดขึ้นมาอยู่ในจอแรก */
+@media (max-width: 430px) {
+  .hero { min-height: 176px; }
+  .family-portrait { height: 104px; inset: 76px 16px auto; }
+  .family-photo img { object-position: center 28%; }
+  .brand { margin-top: -34px; }
+  .brand h1 { font-size: 21px; }
+  .brand p { display: none; }
+}
