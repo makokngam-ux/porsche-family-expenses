@@ -2,8 +2,11 @@ const storageKey = "porsche-family-expenses";
 const budgetStorageKey = "porsche-family-budget";
 const recurringStorageKey = "porsche-family-recurring";
 const syncEndpointStorageKey = "porsche-family-sheet-endpoint";
-// สำเนาข้อมูลล่าสุดที่ได้จากชีต — ใช้เทียบหาว่าเครื่องนี้เพิ่ม/แก้/ลบอะไรไปบ้างที่ยังไม่ขึ้นชีต
-const syncBaseStorageKey = "porsche-family-sync-base";
+const syncKeyStorageKey = "porsche-family-sheet-key";
+const pendingStorageKey = "porsche-family-pending";
+const migrationStorageKey = "porsche-family-migrated";
+const queueReadyStorageKey = "porsche-family-queue-ready";
+const oldSyncBaseStorageKey = "porsche-family-sync-base"; // ของแอป v45: สำเนาข้อมูลชีตล่าสุดที่เครื่องนี้เคยโหลด
 // ลิงก์ Google Apps Script Web App เริ่มต้น (ฝังไว้ให้ทุกเครื่องใช้ได้เลย ไม่ต้องกรอกเอง)
 const DEFAULT_SYNC_ENDPOINT =
   "https://script.google.com/macros/s/AKfycbyMfOvzJL56lBaO1qzLNGRgjPyN4O2ZqwkQt9eMGRISj_6nm35mklvDeLUQStwvF5OBQw/exec";
@@ -44,31 +47,6 @@ const quickGroups = {
   lifestyle: "ไลฟ์สไตล์",
 };
 
-const demoExpenses = [
-  { id: 1, title: "ซื้อวัตถุดิบทำอาหาร", category: "food", amount: 450, date: "2024-05-31" },
-  { id: 2, title: "ค่าเทอม น้องพอร์ช", category: "child", amount: 2800, date: "2024-05-18" },
-  { id: 3, title: "เติมน้ำมัน", category: "travel", amount: 800, date: "2024-05-17" },
-  { id: 4, title: "ค่าน้ำประปา", category: "home", amount: 285, date: "2024-05-16" },
-  { id: 5, title: "ซื้อของใช้ในบ้าน", category: "shop", amount: 690, date: "2024-05-15" },
-  { id: 6, title: "อาหารกลางวัน", category: "food", amount: 5470, date: "2024-05-14" },
-  { id: 7, title: "รถรับส่งโรงเรียน", category: "travel", amount: 2530, date: "2024-05-12" },
-  { id: 8, title: "ค่าหนังสือ", category: "education", amount: 4850, date: "2024-05-10" },
-  { id: 9, title: "ยาสามัญ", category: "health", amount: 2360, date: "2024-05-08" },
-  { id: 10, title: "ของเล่นเสริมพัฒนาการ", category: "child", amount: 1280, date: "2024-05-07" },
-  { id: 11, title: "บริการจิปาถะ", category: "other", amount: 1045, date: "2024-05-06" },
-  { id: 12, title: "ค่าอาหารเดือนเมษายน", category: "food", amount: 5200, date: "2024-04-22" },
-  { id: 13, title: "ค่าน้ำมันเดือนเมษายน", category: "travel", amount: 3100, date: "2024-04-12" },
-  { id: 14, title: "ค่าไฟเดือนเมษายน", category: "home", amount: 2120, date: "2024-04-05" },
-  { id: 15, title: "ของใช้เด็ก", category: "child", amount: 5200, date: "2024-04-03" },
-  { id: 16, title: "ค่าอาหารเดือนมีนาคม", category: "food", amount: 4890, date: "2024-03-19" },
-  { id: 17, title: "ค่ารักษาพยาบาล", category: "health", amount: 3600, date: "2024-03-11" },
-  { id: 18, title: "ซื้อของใช้", category: "shop", amount: 3400, date: "2024-03-09" },
-  { id: 19, title: "ค่าเดินทางเดือนกุมภาพันธ์", category: "travel", amount: 4230, date: "2024-02-14" },
-  { id: 20, title: "ค่าหนังสือเรียน", category: "education", amount: 7000, date: "2024-02-03" },
-  { id: 21, title: "อาหารครอบครัว", category: "food", amount: 3000, date: "2024-01-20" },
-  { id: 22, title: "ค่าส่วนกลาง", category: "home", amount: 9450, date: "2024-01-07" },
-];
-
 const defaultBudget = {
   total: 25000,
   categories: { food: 6500, travel: 4000, child: 5500, home: 3500 },
@@ -82,6 +60,45 @@ const defaultRecurring = [
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+// กันโค้ด HTML ที่ปนมากับชื่อรายการ (จากช่องกรอกหรือจาก Google Sheet) ไม่ให้ทำงานในหน้าแอป
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+}
+
+// รหัสรายการ: เวลา (มิลลิวินาที) + เลขสุ่ม 3 หลัก กันชนกันเมื่อสองเครื่องบันทึกพร้อมกัน
+function newId() {
+  return Date.now() * 1000 + Math.floor(Math.random() * 1000);
+}
+
+// รหัสตายตัว (เป็นตัวเลขเสมอ เพราะคอลัมน์ id ในชีตเป็นชนิดตัวเลข) ของ "บิลประจำ + งวด"
+// สองเครื่องที่กดบันทึกบิลเดียวกันงวดเดียวกันจะได้รหัสเดียวกัน จึงเป็นรายการเดียว ไม่ซ้ำ
+function billPostId(billId, period) {
+  const text = `${billId}|${period}`;
+  let a = 0x811c9dc5;
+  let b = 0x01000193;
+  for (let i = 0; i < text.length; i += 1) {
+    a = Math.imul(a ^ text.charCodeAt(i), 0x01000193) >>> 0;
+    b = Math.imul(b + text.charCodeAt(i), 0x85ebca6b) >>> 0;
+  }
+  return 4000000000000000 + (a % 1000000) * 1000000000 + (b % 1000000000); // 16 หลัก ขึ้นต้นด้วย 4
+}
+
+function sameId(a, b) {
+  return a !== "" && a !== null && a !== undefined && String(a) === String(b);
+}
+
+function isValidDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  if (!match) return false;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return date.getMonth() === Number(match[2]) - 1 && date.getDate() === Number(match[3]);
+}
+
+function todayKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
 
 const money = new Intl.NumberFormat("th-TH", {
@@ -109,20 +126,41 @@ let state = {
   view: "home",
 };
 
+function readStored(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function validRecords(list) {
+  return list.filter((item) => item && typeof item === "object" && item.id !== undefined && item.id !== null && item.id !== "");
+}
+
 function loadExpenses() {
-  const saved = localStorage.getItem(storageKey);
-  if (!saved) return demoExpenses;
+  const saved = readStored(storageKey);
+  if (!saved) return [];
 
   try {
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) ? parsed : demoExpenses;
+    return Array.isArray(parsed) ? validRecords(parsed) : [];
   } catch {
-    return demoExpenses;
+    return [];
   }
 }
 
 function loadBudget() {
-  const saved = localStorage.getItem(budgetStorageKey);
+  const saved = readStored(budgetStorageKey);
   const fallback = clone(defaultBudget);
   if (!saved) return fallback;
 
@@ -135,41 +173,195 @@ function loadBudget() {
 }
 
 function loadRecurring() {
-  const saved = localStorage.getItem(recurringStorageKey);
+  const saved = readStored(recurringStorageKey);
   const fallback = clone(defaultRecurring);
   if (!saved) return fallback;
 
   try {
     const parsed = JSON.parse(saved);
-    return Array.isArray(parsed) ? parsed : fallback;
+    return Array.isArray(parsed) ? validRecords(parsed) : fallback;
   } catch {
     return fallback;
   }
 }
 
+// รับเฉพาะลิงก์ Web App ของ Google Apps Script เท่านั้น — ลิงก์อื่นจะได้ทั้งข้อมูลครอบครัวและสิทธิ์รันโค้ดในหน้าแอป
+// (localhost อนุญาตไว้สำหรับทดสอบในเครื่องตัวเอง)
+function isAllowedEndpoint(value) {
+  try {
+    const url = new URL(String(value || ""));
+    if (url.protocol === "https:" && url.hostname === "script.google.com" && /^\/macros\/s\/[\w-]+\/exec$/.test(url.pathname)) return true;
+    return url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1");
+  } catch {
+    return false;
+  }
+}
+
 function loadSyncEndpoint() {
-  return localStorage.getItem(syncEndpointStorageKey) || DEFAULT_SYNC_ENDPOINT;
+  const saved = readStored(syncEndpointStorageKey);
+  return saved && isAllowedEndpoint(saved) ? saved : DEFAULT_SYNC_ENDPOINT;
 }
 
-function saveExpenses() {
-  localStorage.setItem(storageKey, JSON.stringify(state.expenses));
-  queueAutoSync();
+// ===== คิวรายการที่ยังไม่ได้ส่งขึ้น Google Sheets =====
+// ทุกการเพิ่ม/แก้/ลบ จะถูกจดไว้ที่นี่ (และใน localStorage) จนกว่าชีตจะยืนยันว่ารับแล้ว
+// ข้อมูลที่โหลดมาจากชีตจะถูก "รวม" กับคิวนี้เสมอ ไม่ทับรายการที่ยังส่งไม่สำเร็จ
+function emptyPending() {
+  return {
+    expenses: { upserts: {}, deletes: [] },
+    recurring: { upserts: {}, deletes: [] },
+    budget: null,
+  };
 }
 
-function saveBudget() {
-  localStorage.setItem(budgetStorageKey, JSON.stringify(state.budget));
-  queueAutoSync();
+function loadPending() {
+  const base = emptyPending();
+  try {
+    const parsed = JSON.parse(readStored(pendingStorageKey) || "null");
+    if (!parsed || typeof parsed !== "object") return base;
+    ["expenses", "recurring"].forEach((kind) => {
+      const group = parsed[kind] || {};
+      if (group.upserts && typeof group.upserts === "object") base[kind].upserts = group.upserts;
+      if (Array.isArray(group.deletes)) base[kind].deletes = group.deletes.map(String);
+    });
+    if (parsed.budget && typeof parsed.budget === "object") base.budget = parsed.budget;
+  } catch {
+    // คิวอ่านไม่ได้ → เริ่มคิวว่าง
+  }
+  return base;
 }
 
-function saveRecurring() {
-  localStorage.setItem(recurringStorageKey, JSON.stringify(state.recurring));
-  queueAutoSync();
+let pending = loadPending();
+let storageFailed = false;
+
+// อัปเดตจากแอป v45: v45 ไม่มีคิว แต่จำ "ข้อมูลชีตล่าสุด" ไว้ สิ่งที่ต่างจากข้อมูลในเครื่อง = การแก้ไขที่ยังไม่ได้ส่ง
+// → ย้ายส่วนต่างนั้นเข้าคิวครั้งเดียว จะได้ไม่หายตอนเปลี่ยนเวอร์ชัน
+function importOldSyncBase() {
+  const raw = readStored(oldSyncBaseStorageKey);
+  if (!raw || readStored(queueReadyStorageKey) === "1") return;
+  let base;
+  try {
+    base = JSON.parse(raw);
+  } catch {
+    return;
+  }
+  if (!base || !Array.isArray(base.expenses) || !Array.isArray(base.recurring)) return;
+  const text = (value) => String(value ?? "");
+  const shape = {
+    expenses: (i) => [text(i.title), text(i.category), Number(i.amount || 0), toISODate(i.date), text(i.recurringId)].join("|"),
+    recurring: (i) => [text(i.title), text(i.category), Number(i.amount || 0), Number(i.day || 1), i.freq || "monthly", Number(i.month || 0), text(i.end)].join("|"),
+  };
+  const budgetShape = (b) => JSON.stringify([Number(b?.total || 0), Object.entries(b?.categories || {}).map(([k, v]) => [k, Number(v || 0)]).sort()]);
+  queueChange(() => {
+    ["expenses", "recurring"].forEach((kind) => {
+      const baseMap = new Map(validRecords(base[kind]).map((item) => [String(item.id), shape[kind](item)]));
+      const localIds = new Set();
+      state[kind].forEach((item) => {
+        localIds.add(String(item.id));
+        if (baseMap.get(String(item.id)) !== shape[kind](item) && item.title) markUpsert(kind, item);
+      });
+      baseMap.forEach((_, id) => {
+        if (!localIds.has(id)) markDelete(kind, id);
+      });
+    });
+    if (base.budget && budgetShape(base.budget) !== budgetShape(state.budget)) markBudget(state.budget);
+  });
+  writeStored(queueReadyStorageKey, "1");
+  try {
+    localStorage.removeItem(oldSyncBaseStorageKey);
+  } catch {
+    // ลบไม่ได้ก็ไม่เป็นไร เครื่องหมายด้านบนกันทำซ้ำแล้ว
+  }
+}
+
+function savePending() {
+  if (!writeStored(pendingStorageKey, JSON.stringify(pending))) storageFailed = true;
+}
+
+function pendingCount(p = pending) {
+  return (
+    Object.keys(p.expenses.upserts).length +
+    p.expenses.deletes.length +
+    Object.keys(p.recurring.upserts).length +
+    p.recurring.deletes.length +
+    (p.budget ? 1 : 0)
+  );
+}
+
+// ทุกการแก้คิวต้องผ่านฟังก์ชันนี้: อ่านคิวล่าสุดจากเครื่องก่อน (อีกแท็บอาจเพิ่งเขียน) → แก้ → เขียนกลับทันที
+function queueChange(change) {
+  pending = loadPending();
+  change();
+  savePending();
+}
+
+function markBudget(budget) {
+  pending.budget = clone(budget);
+}
+
+function markUpsert(kind, record) {
+  const key = String(record.id);
+  pending[kind].upserts[key] = clone(record);
+  pending[kind].deletes = pending[kind].deletes.filter((id) => id !== key);
+}
+
+function markDelete(kind, id) {
+  const key = String(id);
+  delete pending[kind].upserts[key];
+  if (!pending[kind].deletes.includes(key)) pending[kind].deletes.push(key);
+}
+
+// นำคิวไปทับลงบนรายการชุดหนึ่ง: ลบที่สั่งลบ, แทนที่ที่แก้, เติมรายการใหม่ไว้บนสุด
+function applyOpGroup(list, group) {
+  const deleted = new Set(group.deletes);
+  const seen = new Set();
+  const result = [];
+  list.forEach((item) => {
+    const key = String(item.id);
+    if (deleted.has(key) || seen.has(key)) return;
+    seen.add(key);
+    result.push(Object.hasOwn(group.upserts, key) ? clone(group.upserts[key]) : item);
+  });
+  const added = Object.keys(group.upserts)
+    .filter((key) => !seen.has(key) && !deleted.has(key))
+    .map((key) => clone(group.upserts[key]));
+  return [...added.reverse(), ...result];
+}
+
+// ชีตยืนยันรับแล้ว → เอาออกจากคิว เฉพาะรายการที่ไม่ได้ถูกแก้ซ้ำระหว่างรอ
+function clearSentPending(sent) {
+  pending = loadPending();
+  ["expenses", "recurring"].forEach((kind) => {
+    Object.keys(sent[kind].upserts).forEach((key) => {
+      const now = pending[kind].upserts[key];
+      if (now && JSON.stringify(now) === JSON.stringify(sent[kind].upserts[key])) delete pending[kind].upserts[key];
+    });
+    const sentDeletes = new Set(sent[kind].deletes);
+    pending[kind].deletes = pending[kind].deletes.filter((id) => !sentDeletes.has(id));
+  });
+  if (sent.budget && pending.budget && JSON.stringify(sent.budget) === JSON.stringify(pending.budget)) pending.budget = null;
+  savePending();
+}
+
+function persistLocal() {
+  // (คิวถูกเขียนไปแล้วใน queueChange ก่อนถึงตรงนี้ — ถ้าเขียนข้อมูลแสดงผลไม่สำเร็จ รายการยังอยู่ในคิวและจะถูกส่งขึ้นชีต)
+  const results = [
+    writeStored(storageKey, JSON.stringify(state.expenses)),
+    writeStored(budgetStorageKey, JSON.stringify(state.budget)),
+    writeStored(recurringStorageKey, JSON.stringify(state.recurring)),
+  ];
+  storageFailed = results.includes(false);
+  if (storageFailed) refreshSyncBadge();
+  return !storageFailed;
+}
+
+// บันทึกลงเครื่อง แล้วส่งขึ้นชีตทันที (ต้องเรียก markUpsert/markDelete ก่อน)
+function commitChange() {
+  persistLocal();
+  scheduleSync(150);
 }
 
 function saveLocalSnapshot() {
-  localStorage.setItem(storageKey, JSON.stringify(state.expenses));
-  localStorage.setItem(budgetStorageKey, JSON.stringify(state.budget));
-  localStorage.setItem(recurringStorageKey, JSON.stringify(state.recurring));
+  persistLocal();
 }
 
 function sum(items) {
@@ -243,7 +435,8 @@ function selectedExpenses() {
   }
 
   if (state.period === "day") {
-    const latestDate = sortedByDate(realForMonth(state.month))[0]?.date;
+    // ดูเดือนปัจจุบัน → รายจ่ายของ "วันนี้" / ดูเดือนย้อนหลัง → วันล่าสุดที่มีรายการในเดือนนั้น
+    const latestDate = state.month === currentMonthKey() ? todayKey() : sortedByDate(realForMonth(state.month))[0]?.date;
     return latestDate ? state.expenses.filter((item) => item.date === latestDate) : [];
   }
 
@@ -292,14 +485,14 @@ function dueSoonRecurring() {
       if (installmentEnded(r)) return false;
       const day = Math.min(Number(r.day) || 1, last);
       const diff = Math.round((new Date(y, m, day) - todayMid) / 86400000);
-      const postedThisMonth = state.expenses.some((e) => e.recurringId === r.id && monthOf(e.date) === monthKey);
+      const postedThisMonth = state.expenses.some((e) => sameId(e.recurringId, r.id) && monthOf(e.date) === monthKey);
       return diff <= 0 && !postedThisMonth;
     })
     .sort((a, b) => (Number(a.day) || 1) - (Number(b.day) || 1));
 }
 
 function yearlyPostedThisYear(id, year) {
-  return state.expenses.some((e) => e.recurringId === id && new Date(e.date).getFullYear() === year);
+  return state.expenses.some((e) => sameId(e.recurringId, id) && Number(String(e.date).slice(0, 4)) === year);
 }
 
 // รายจ่ายประจำปีที่ใกล้/เลยกำหนด และยังไม่ได้บันทึกในปีนี้
@@ -318,9 +511,9 @@ function reminderRow(item, whenText) {
   const category = categories[item.category] || categories.other;
   return `<li class="due-reminder">
     <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
-    <b>${item.title}<small>⏰ ${whenText}</small></b>
+    <b>${esc(item.title)}<small>⏰ ${whenText}</small></b>
     <strong>฿ ${money.format(item.amount)}</strong>
-    <button class="small-pill" type="button" data-post-recurring="${item.id}">บันทึก</button>
+    <button class="small-pill" type="button" data-post-recurring="${esc(item.id)}">บันทึก</button>
   </li>`;
 }
 
@@ -567,7 +760,7 @@ function renderCategoryViews() {
 function recurringPosted(recurring) {
   return state.expenses.some(
     (item) =>
-      item.recurringId === recurring.id &&
+      sameId(item.recurringId, recurring.id) &&
       monthOf(item.date) === state.month,
   );
 }
@@ -590,10 +783,10 @@ function renderRecurring() {
           }
           return `<li>
     <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
-            <b>${item.title}<small>${note}</small></b>
+            <b>${esc(item.title)}<small>${esc(note)}</small></b>
             <strong>฿ ${money.format(item.amount)}</strong>
-            <button class="edit-expense" type="button" data-edit-recurring="${item.id}" aria-label="แก้ไข ${item.title}">${iconMarkup("i-edit")}</button>
-            <button class="delete-expense" type="button" data-delete-recurring="${item.id}" aria-label="ลบ ${item.title}">${iconMarkup("i-trash")}</button>
+            <button class="edit-expense" type="button" data-edit-recurring="${esc(item.id)}" aria-label="แก้ไข ${esc(item.title)}">${iconMarkup("i-edit")}</button>
+            <button class="delete-expense" type="button" data-delete-recurring="${esc(item.id)}" aria-label="ลบ ${esc(item.title)}">${iconMarkup("i-trash")}</button>
           </li>`;
         })
         .join("")
@@ -663,7 +856,7 @@ function buildAlerts() {
     });
   });
 
-  if (!monthlyExpenses().some((item) => item.date === new Date().toISOString().slice(0, 10))) {
+  if (!monthlyExpenses().some((item) => item.date === todayKey())) {
     alerts.push({
       title: "วันนี้ยังไม่มีรายการใหม่",
       detail: "แตะปุ่ม + เพื่อบันทึกรายจ่ายวันนี้",
@@ -687,7 +880,7 @@ function renderAlerts() {
     ? alerts
         .map(
           (alert) =>
-            `<li class="${alert.tone}"><span>${iconMarkup(alert.tone === "info" ? "i-bell" : "i-budget")}</span><b>${alert.title}<small>${alert.detail}</small></b></li>`,
+            `<li class="${alert.tone}"><span>${iconMarkup(alert.tone === "info" ? "i-bell" : "i-budget")}</span><b>${esc(alert.title)}<small>${esc(alert.detail)}</small></b></li>`,
         )
         .join("")
     : `<li class="info"><span>${iconMarkup("i-bell")}</span><b>ไม่มีแจ้งเตือน<small>ทุกอย่างยังอยู่ในเกณฑ์ดี</small></b></li>`;
@@ -697,12 +890,11 @@ function transactionMarkup(item, editable = false) {
   const category = categories[item.category] || categories.other;
   return `<li>
     ${iconBadge(item.category)}
-    <b>${item.title}<small>${category.label}</small></b>
+    <b>${esc(item.title)}<small>${category.label}</small></b>
     <strong>฿ ${money.format(item.amount)}</strong>
-    <em>${formatDate(item.date)}</em>
-    <button class="edit-expense" type="button" data-edit-id="${item.id}" aria-label="แก้ไข ${item.title}">${iconMarkup("i-edit")}</button>
-    <button class="delete-expense" type="button" data-delete-id="${item.id}" aria-label="ลบ ${item.title}">${iconMarkup("i-trash")}</button>
-    ${editable ? "" : ""}
+    <em>${esc(formatDate(item.date))}</em>
+    <button class="edit-expense" type="button" data-edit-id="${esc(item.id)}" aria-label="แก้ไข ${esc(item.title)}">${iconMarkup("i-edit")}</button>
+    <button class="delete-expense" type="button" data-delete-id="${esc(item.id)}" aria-label="ลบ ${esc(item.title)}">${iconMarkup("i-trash")}</button>
   </li>`;
 }
 
@@ -872,10 +1064,10 @@ function renderYearly() {
           const due = item.month ? `${item.day || 1} ${THAI_MONTHS[item.month - 1]}` : "-";
           return `<li>
       <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
-      <b>${item.title}<small>${category.label} · ครบกำหนด ${due} ทุกปี</small></b>
+      <b>${esc(item.title)}<small>${category.label} · ครบกำหนด ${esc(due)} ทุกปี</small></b>
       <strong>฿ ${money.format(item.amount)}</strong>
-      <button class="edit-expense" type="button" data-edit-recurring="${item.id}" aria-label="แก้ไข ${item.title}">${iconMarkup("i-edit")}</button>
-      <button class="delete-expense" type="button" data-delete-recurring="${item.id}" aria-label="ลบ ${item.title}">${iconMarkup("i-trash")}</button>
+      <button class="edit-expense" type="button" data-edit-recurring="${esc(item.id)}" aria-label="แก้ไข ${esc(item.title)}">${iconMarkup("i-edit")}</button>
+      <button class="delete-expense" type="button" data-delete-recurring="${esc(item.id)}" aria-label="ลบ ${esc(item.title)}">${iconMarkup("i-trash")}</button>
     </li>`;
         })
         .join("")
@@ -891,6 +1083,8 @@ function openModal(item = null) {
   const form = document.querySelector("[data-expense-form]");
   const dateInput = form?.elements.date;
   form?.reset();
+  // ช่องซ่อน id ไม่ถูกล้างด้วย form.reset() — ต้องล้างเองทุกครั้ง ไม่งั้น "เพิ่มรายการ" จะไปทับรายการที่เพิ่งแก้ไข
+  if (form) form.elements.id.value = "";
 
   if (item && form) {
     form.elements.id.value = item.id;
@@ -903,7 +1097,8 @@ function openModal(item = null) {
   } else {
     document.querySelector("[data-modal-heading]").textContent = "เพิ่มรายจ่าย";
     document.querySelector("[data-submit-label]").textContent = "บันทึก";
-    if (dateInput) dateInput.value = selectedMonthDate(new Date().getDate());
+    // ดูเดือนปัจจุบันอยู่ → วันนี้ / ดูเดือนย้อนหลังอยู่ → วันเดียวกันของเดือนนั้น (ไว้กรอกย้อนหลัง)
+    if (dateInput) dateInput.value = state.month === currentMonthKey() ? todayKey() : selectedMonthDate(new Date().getDate());
   }
 
   modal?.classList.add("open");
@@ -1006,8 +1201,15 @@ function closeAlerts() {
 function openSync() {
   const modal = document.querySelector("[data-sync-modal]");
   const form = document.querySelector("[data-sync-form]");
-  if (form) form.elements.endpoint.value = state.syncEndpoint || "";
-  setSyncStatus(state.syncEndpoint ? "พร้อมซิงก์กับ Google Sheets" : "ยังไม่ได้เชื่อม Google Sheets", state.syncEndpoint ? "good" : "");
+  if (form) {
+    form.elements.endpoint.value = state.syncEndpoint || "";
+    if (form.elements.syncKey) form.elements.syncKey.value = loadSyncKey();
+  }
+  // คงข้อความผิดพลาดล่าสุดไว้ให้เห็น ไม่รีเซ็ตเป็น "พร้อมซิงก์" ทับ
+  if (!state.syncEndpoint) setSyncStatus("ยังไม่ได้เชื่อม Google Sheets");
+  else if (lastSyncError) setSyncStatus(lastSyncError, "error");
+  else if (pendingCount()) setSyncStatus(`มี ${pendingCount()} รายการรอส่งขึ้น Google Sheets`, "error");
+  else setSyncStatus("ข้อมูลตรงกับ Google Sheets แล้ว", "good");
   modal?.classList.add("open");
   modal?.setAttribute("aria-hidden", "false");
   form?.elements.endpoint.focus();
@@ -1028,42 +1230,59 @@ function closePanels() {
   closeSync();
 }
 
-function exportCsv() {
-  const rows = filteredExpenses();
+// ข้อความที่ขึ้นต้นด้วย = + - @ จะถูกโปรแกรมตารางตีเป็นสูตร → เติม ' นำหน้าให้เป็นข้อความ (ตัวเลขไม่แตะ)
+function csvCell(cell) {
+  let text = String(cell ?? "");
+  if (typeof cell !== "number" && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+// all = true → สำรองรายจ่ายทุกเดือนทุกหมวด / false → เฉพาะเดือนและหมวดที่กรองอยู่
+function exportCsv({ all = false } = {}) {
+  const rows = sortedByDate(all ? state.expenses : filteredExpenses());
   const header = ["date", "title", "category", "amount"];
   const csvRows = rows.map((item) => [
     item.date,
     item.title,
     categories[item.category]?.label || "อื่นๆ",
-    item.amount,
+    Number(item.amount || 0),
   ]);
-  const csv = [header, ...csvRows]
-    .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
-    .join("\n");
+  const csv = [header, ...csvRows].map((row) => row.map(csvCell).join(",")).join("\n");
   const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `porsche-expenses-${state.month}.csv`;
+  link.download = all ? `porsche-expenses-all-${todayKey()}.csv` : `porsche-expenses-${state.month}.csv`;
   link.click();
   URL.revokeObjectURL(url);
   closeActions();
 }
 
-function clearAllData() {
-  const confirmed = window.confirm("ต้องการล้างข้อมูลทั้งหมดใช่ไหม? รายจ่าย งบประมาณ และรายจ่ายประจำจะถูกลบออกจากเครื่องนี้");
+async function clearAllData() {
+  const count = state.expenses.length;
+  const confirmed = window.confirm(
+    `ต้องการล้างข้อมูลทั้งหมดใช่ไหม?\n\nรายจ่าย ${count} รายการ งบประมาณ และรายจ่ายประจำ จะถูกลบจาก "ทุกเครื่อง" และใน Google Sheets ด้วย ไม่ใช่แค่เครื่องนี้`,
+  );
   if (!confirmed) return;
+  if (count > 0 && !window.confirm(`ยืนยันอีกครั้ง: ลบรายจ่ายทั้ง ${count} รายการถาวร?`)) return;
 
+  // โหลดข้อมูลล่าสุดก่อน เพื่อให้ลบครบถึงรายการที่เครื่องอื่นเพิ่งเพิ่ม (ถ้าโหลดไม่ได้ จะลบเท่าที่เครื่องนี้เห็น)
+  if (state.syncEndpoint) await runSync();
+
+  queueChange(() => {
+    state.expenses.forEach((item) => markDelete("expenses", item.id));
+    state.recurring.forEach((item) => markDelete("recurring", item.id));
+    markBudget({ total: 0, categories: {} });
+  });
   state.expenses = [];
-  state.budget = { total: 0, categories: {} };
   state.recurring = [];
-  saveLocalSnapshot();
+  state.budget = { total: 0, categories: {} };
+  remoteHold = null;
+  // ไม่ต้องเติมรายจ่ายประจำปีตั้งต้นกลับมาอีก
+  writeStored(migrationStorageKey, "1");
+  commitChange();
   renderAll();
   closePanels();
-
-  if (state.syncEndpoint) {
-    syncToSheet({ silent: true });
-  }
 }
 
 function setSyncStatus(message, tone = "") {
@@ -1074,31 +1293,107 @@ function setSyncStatus(message, tone = "") {
   status.classList.toggle("is-error", tone === "error");
 }
 
-function saveSyncEndpoint(value) {
-  const next = value.trim();
-  if (next !== state.syncEndpoint) {
-    syncBase = null;
-    localStorage.removeItem(syncBaseStorageKey);
+// ป้ายสถานะซิงก์ที่มุมจอ: บอกให้รู้ว่ารายการขึ้นชีตแล้วหรือยัง (แตะเพื่อลองส่งใหม่)
+let syncBadgeTimer = null;
+function showSyncBadge(message, tone = "", { autoHide = 0 } = {}) {
+  let badge = document.querySelector("[data-sync-badge]");
+  if (!badge) {
+    badge = document.createElement("button");
+    badge.type = "button";
+    badge.className = "sync-badge";
+    badge.dataset.syncBadge = "";
+    badge.addEventListener("click", () => (remoteHold ? resolveRemoteHold() : runSync({ manual: true })));
+    document.body.appendChild(badge);
   }
-  state.syncEndpoint = next;
-  if (state.syncEndpoint) {
-    localStorage.setItem(syncEndpointStorageKey, state.syncEndpoint);
-  } else {
-    localStorage.removeItem(syncEndpointStorageKey);
+  window.clearTimeout(syncBadgeTimer);
+  badge.textContent = message;
+  badge.dataset.tone = tone;
+  badge.hidden = !message;
+  if (autoHide) {
+    syncBadgeTimer = window.setTimeout(() => {
+      badge.hidden = true;
+    }, autoHide);
   }
 }
 
+function refreshSyncBadge() {
+  if (!state.syncEndpoint) {
+    showSyncBadge("");
+    return;
+  }
+  const count = pendingCount();
+  if (storageFailed) {
+    showSyncBadge("พื้นที่เก็บข้อมูลในเครื่องเต็ม — อย่าปิดแอปจนกว่ารายการจะขึ้นชีต", "error");
+    return;
+  }
+  if (remoteHold) {
+    showSyncBadge(`Google Sheets ไม่มีรายการของเครื่องนี้ ${remoteHold.localCount} รายการ · แตะเพื่อเลือก`, "error");
+    return;
+  }
+  if (syncing) {
+    if (count) showSyncBadge(`กำลังส่งขึ้นชีต ${count} รายการ…`, "busy");
+    return;
+  }
+  if (count) {
+    showSyncBadge(`ยังไม่ได้ส่งขึ้นชีต ${count} รายการ · แตะเพื่อลองใหม่`, "error");
+  } else if (lastSyncError) {
+    showSyncBadge("โหลดข้อมูลล่าสุดจากชีตไม่ได้ · แตะเพื่อลองใหม่", "error");
+  } else if (justPushed) {
+    justPushed = false;
+    showSyncBadge("บันทึกขึ้นชีตแล้ว ✓", "good", { autoHide: 2500 });
+  } else {
+    showSyncBadge("");
+  }
+}
+
+function loadSyncKey() {
+  return readStored(syncKeyStorageKey) || "";
+}
+
+function saveSyncKey(value) {
+  const key = String(value || "").trim();
+  try {
+    if (key) localStorage.setItem(syncKeyStorageKey, key);
+    else localStorage.removeItem(syncKeyStorageKey);
+  } catch {
+    // เก็บรหัสไม่ได้ก็ยังใช้ต่อในรอบนี้ได้
+  }
+}
+
+function saveSyncEndpoint(value) {
+  const next = value.trim();
+  if (next && !isAllowedEndpoint(next)) return false;
+  if (next !== state.syncEndpoint) backendMode = "unknown";
+  state.syncEndpoint = next;
+  try {
+    if (state.syncEndpoint) localStorage.setItem(syncEndpointStorageKey, state.syncEndpoint);
+    else localStorage.removeItem(syncEndpointStorageKey);
+  } catch {
+    // ใช้ค่าในหน่วยความจำต่อ
+  }
+  return true;
+}
+
 function normalizeRemoteData(payload) {
-  const data = payload?.data || payload || {};
+  const data = payload?.data;
+  // ต้องเป็นคำตอบที่ครบจริงเท่านั้น — คำตอบว่าง/ผิดรูปแบบ ห้ามตีความว่าเป็น "ไม่มีข้อมูล"
+  if (payload?.ok !== true || !data || !Array.isArray(data.expenses) || !Array.isArray(data.recurring)) {
+    throw new Error("ข้อมูลจาก Google Sheets ไม่ครบ ยังไม่เปลี่ยนข้อมูลในเครื่อง");
+  }
   return {
-    expenses: (Array.isArray(data.expenses) ? data.expenses : []).map((item) => ({
-      ...item,
-      date: toISODate(item.date),
-    })),
+    expenses: validRecords(data.expenses).map((item) => ({ ...item, date: toISODate(item.date) })),
     budget: data.budget && typeof data.budget === "object" ? data.budget : clone(defaultBudget),
-    recurring: Array.isArray(data.recurring) ? data.recurring : [],
+    recurring: validRecords(data.recurring),
     updatedAt: data.updatedAt || payload?.updatedAt || "",
   };
+}
+
+function syncErrorMessage(error) {
+  const message = String(error?.message || error || "");
+  if (message === "unauthorized") return "รหัสผ่านซิงก์ไม่ถูกต้อง — เปิด “ซิงก์ Google Sheets” แล้วใส่รหัสให้ตรงกับที่ตั้งไว้";
+  if (error?.name === "AbortError") return "Google Sheets ตอบช้าเกินไป";
+  if (error instanceof TypeError) return "เชื่อมต่ออินเทอร์เน็ตไม่ได้";
+  return message || "ซิงก์ข้อมูลไม่สำเร็จ";
 }
 
 function endpointWithParams(endpoint, params) {
@@ -1113,16 +1408,20 @@ function requestSheetAction(endpoint, params) {
     const timer = window.setTimeout(() => {
       cleanup();
       reject(new Error("เชื่อมต่อ Google Sheets ช้าเกินไป"));
-    }, 15000);
+    }, 35000);
 
     function cleanup() {
       window.clearTimeout(timer);
-      delete window[callbackName];
+      // ปล่อยฟังก์ชันเปล่าไว้ เผื่อคำตอบมาถึงหลังหมดเวลา จะได้ไม่เกิด error
+      window[callbackName] = () => {
+        delete window[callbackName];
+      };
       script.remove();
     }
 
     window[callbackName] = (payload) => {
       cleanup();
+      delete window[callbackName];
       if (payload?.ok === false) {
         reject(new Error(payload.error || "ซิงก์ข้อมูลไม่สำเร็จ"));
         return;
@@ -1140,280 +1439,237 @@ function requestSheetAction(endpoint, params) {
 }
 
 async function loadFromSheet(endpoint) {
-  const payload = await requestSheetAction(endpoint, { action: "loadAll" });
-  return normalizeRemoteData(payload);
+  const params = { action: "loadAll" };
+  const key = loadSyncKey();
+  if (key) params.key = key;
+  return normalizeRemoteData(await requestSheetAction(endpoint, params));
 }
 
-// ===== ซิงก์แบบรวมข้อมูล (merge) =====
-// เดิม: ทุกครั้งที่บันทึก จะส่ง "ข้อมูลทั้งหมดในเครื่อง" ไปเขียนทับชีต
-//   → ถ้าอีกเครื่องเพิ่มรายการไว้ หรือส่งขึ้นชีตไม่สำเร็จแล้วโหลดจากชีตทับ รายการจะหาย
-// ใหม่: เทียบกับข้อมูลชีตล่าสุดที่เคยโหลด (syncBase) แล้วส่งเฉพาะ "เพิ่ม/แก้/ลบ" ไปรวมในชีต
-//   รายการที่ยังส่งไม่สำเร็จจะค้างในเครื่องและส่งใหม่อัตโนมัติ ไม่ถูกโหลดจากชีตทับ
+const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-function loadSyncBase() {
-  try {
-    const base = JSON.parse(localStorage.getItem(syncBaseStorageKey));
-    return base && Array.isArray(base.expenses) && Array.isArray(base.recurring) ? base : null;
-  } catch {
-    return null;
+// สคริปต์เวอร์ชันเก่าอ่านชีตได้ระหว่างที่อีกเครื่องกำลังเขียน (ได้ข้อมูลว่างชั่วขณะ)
+// ถ้าชีตว่างทั้งที่ในเครื่องมีรายการ ให้รออีกนิดแล้วอ่านซ้ำเพื่อยืนยัน
+async function loadVerified(endpoint) {
+  let remote = await loadFromSheet(endpoint);
+  if (backendMode !== "ops" && remote.expenses.length === 0 && state.expenses.length > 0) {
+    await wait(2500);
+    remote = await loadFromSheet(endpoint);
   }
+  return remote;
 }
 
-let syncBase = loadSyncBase();
-
-function saveSyncBase(base) {
-  syncBase = base;
-  localStorage.setItem(syncBaseStorageKey, JSON.stringify(base));
-}
-
-// รูปแบบเดียวกับที่ Apps Script เก็บ/คืนค่า เพื่อให้เทียบกันได้ตรง
-function normExpense(item) {
-  return {
-    id: item.id,
-    title: String(item.title || ""),
-    category: item.category || "other",
-    amount: Number(item.amount || 0),
-    date: toISODate(item.date),
-    recurringId: item.recurringId || "",
-  };
-}
-
-function normRecurring(item) {
-  return {
-    id: item.id,
-    title: String(item.title || ""),
-    category: item.category || "other",
-    amount: Number(item.amount || 0),
-    day: Number(item.day || 1),
-    freq: item.freq || "monthly",
-    month: item.month ? Number(item.month) : null,
-    end: item.end || "",
-  };
-}
-
-function normBudget(budget) {
-  const categories = (budget && budget.categories) || {};
-  const sorted = {};
-  Object.keys(categories).sort().forEach((key) => {
-    sorted[key] = Number(categories[key] || 0);
-  });
-  return { total: Number((budget && budget.total) || 0), categories: sorted };
-}
-
-function diffList(baseList, currentList, norm, kind) {
-  const ops = [];
-  const baseMap = new Map(baseList.map((item) => [String(item.id), JSON.stringify(norm(item))]));
-  const currentIds = new Set();
-  currentList.forEach((item) => {
-    const key = String(item.id);
-    currentIds.add(key);
-    const normalized = norm(item);
-    if (baseMap.get(key) !== JSON.stringify(normalized)) ops.push({ type: `upsert${kind}`, item: normalized });
-  });
-  baseList.forEach((item) => {
-    if (!currentIds.has(String(item.id))) ops.push({ type: `delete${kind}`, id: item.id });
-  });
-  return ops;
-}
-
-function diffOps(base, current) {
-  const ops = [
-    ...diffList(base.expenses || [], current.expenses || [], normExpense, "Expense"),
-    ...diffList(base.recurring || [], current.recurring || [], normRecurring, "Recurring"),
-  ];
-  if (JSON.stringify(normBudget(base.budget)) !== JSON.stringify(normBudget(current.budget))) {
-    ops.push({ type: "setBudget", budget: normBudget(current.budget) });
-  }
-  return ops;
-}
-
-// ส่งทุกอย่างในเครื่องขึ้นไปรวม (ไม่ลบอะไรในชีต) — ใช้กับปุ่ม "บันทึกขึ้นชีต"
-function pushAllOps(current) {
-  return [
-    ...(current.expenses || []).map((item) => ({ type: "upsertExpense", item: normExpense(item) })),
-    ...(current.recurring || []).map((item) => ({ type: "upsertRecurring", item: normRecurring(item) })),
-    { type: "setBudget", budget: normBudget(current.budget) },
-  ];
-}
-
-// เครื่องที่เพิ่งอัปเดตแอป (ยังไม่มี syncBase): เก็บรายการที่สร้างหลังชีตอัปเดตล่าสุดแต่ยังไม่อยู่ในชีตไว้ ไม่ให้หาย
-function firstRunOps(remote) {
-  const remoteIds = new Set(remote.expenses.map((item) => String(item.id)));
-  const remoteTime = Date.parse(remote.updatedAt) || 0;
-  if (!remoteTime) return [];
-  return state.expenses
-    .filter((item) => !remoteIds.has(String(item.id)) && Number(item.id) > remoteTime)
-    .map((item) => ({ type: "upsertExpense", item: normExpense(item) }));
-}
-
-function applyOpsLocal(data, ops) {
-  const result = { expenses: [...data.expenses], recurring: [...data.recurring], budget: data.budget };
-  const sameId = (a, b) => String(a) === String(b);
-  const upsert = (list, item) => {
-    const index = list.findIndex((x) => sameId(x.id, item.id));
-    if (index >= 0) list[index] = item;
-    else list.unshift(item);
-  };
-  ops.forEach((op) => {
-    if (op.type === "upsertExpense") upsert(result.expenses, op.item);
-    else if (op.type === "deleteExpense") result.expenses = result.expenses.filter((x) => !sameId(x.id, op.id));
-    else if (op.type === "upsertRecurring") upsert(result.recurring, op.item);
-    else if (op.type === "deleteRecurring") result.recurring = result.recurring.filter((x) => !sameId(x.id, op.id));
-    else if (op.type === "setBudget") result.budget = op.budget;
-  });
-  return result;
-}
-
-function currentSnapshot() {
-  return { expenses: state.expenses, recurring: state.recurring || [], budget: state.budget };
-}
-
-async function postToSheet(endpoint, body) {
+async function postToSheet(endpoint, body, { keepalive = false } = {}) {
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 20000);
+  const timer = window.setTimeout(() => controller.abort(), 30000);
   try {
+    const text = JSON.stringify({ ...body, key: loadSyncKey() || undefined });
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(body),
+      body: text,
       signal: controller.signal,
+      // keepalive ให้คำขอไปต่อได้แม้ผู้ใช้สลับแอป/ปิดจอ (เบราว์เซอร์จำกัดขนาดไว้ราว 64KB)
+      keepalive: keepalive && new Blob([text]).size < 60000,
     });
-    const payload = await response.json();
-    if (payload?.ok === false) throw new Error(payload.error || "บันทึกขึ้น Google Sheets ไม่สำเร็จ");
-    return payload;
+    if (!response.ok) throw new Error(`Google Sheets ตอบกลับผิดปกติ (${response.status})`);
+    return await response.json();
   } finally {
     window.clearTimeout(timer);
   }
 }
 
-let syncChain = Promise.resolve();
-let syncRetryTimer = null;
-let syncRetryDelay = 0;
-
-// ทำทีละรอบเสมอ (กันโหลด/บันทึกซ้อนกันแล้วข้อมูลทับกัน)
-function runSync(options = {}) {
-  syncChain = syncChain.then(() => doSync(options)).catch((error) => console.warn("sync error", error));
-  return syncChain;
+// รูปแบบเดียวกับที่แอป v45 และสคริปต์ชีตใช้อยู่: รายการคำสั่งเรียงกัน
+function opsPayload(sent) {
+  const ops = [
+    ...sent.expenses.deletes.map((id) => ({ type: "deleteExpense", id })),
+    ...Object.values(sent.expenses.upserts).map((item) => ({ type: "upsertExpense", item })),
+    ...sent.recurring.deletes.map((id) => ({ type: "deleteRecurring", id })),
+    ...Object.values(sent.recurring.upserts).map((item) => ({ type: "upsertRecurring", item })),
+  ];
+  if (sent.budget) ops.push({ type: "setBudget", budget: sent.budget });
+  return ops;
 }
 
-function scheduleSyncRetry(failed) {
-  window.clearTimeout(syncRetryTimer);
-  syncRetryDelay = failed ? Math.min(syncRetryDelay ? syncRetryDelay * 2 : 5000, 60000) : 0;
-  syncRetryTimer = window.setTimeout(() => runSync({ silent: true }), failed ? syncRetryDelay : 900);
+// "unknown" = ยังไม่รู้ว่าสคริปต์เป็นเวอร์ชันไหน, "ops" = เวอร์ชันใหม่ (รวมทีละรายการฝั่งชีต), "legacy" = เวอร์ชันเก่า
+let backendMode = "unknown";
+
+// ส่งรายการในคิวขึ้นชีต แล้วคืนข้อมูลล่าสุดของชีตหลังรวมแล้ว
+async function pushPending(endpoint, sent) {
+  // ลองแบบใหม่ก่อนทุกครั้ง (ไม่จำว่าเป็นสคริปต์เก่า) — พออัปเดตสคริปต์เมื่อไร แอปจะใช้แบบใหม่ทันทีโดยไม่ต้องเปิดใหม่
+  const first = await postToSheet(endpoint, { action: "applyOps", ops: opsPayload(sent) }, { keepalive: true });
+  if (first?.ok === true) {
+    backendMode = "ops";
+    return normalizeRemoteData(first);
+  }
+  if (first?.error !== "Unknown action") throw new Error(first?.error || "บันทึกขึ้น Google Sheets ไม่สำเร็จ");
+  backendMode = "legacy";
+
+  // สคริปต์เวอร์ชันเก่า: โหลดข้อมูลล่าสุดก่อน → รวมกับคิว → ค่อยส่งกลับทั้งชุด (ไม่ส่งข้อมูลเก่าในเครื่องขึ้นไปทับ)
+  const remote = await loadVerified(endpoint);
+  const merged = {
+    expenses: applyOpGroup(remote.expenses, sent.expenses),
+    recurring: applyOpGroup(remote.recurring, sent.recurring),
+    budget: sent.budget || remote.budget,
+  };
+  const reply = await postToSheet(endpoint, {
+    action: "saveAll",
+    data: { version: 1, updatedAt: new Date().toISOString(), ...merged },
+  });
+  if (reply?.ok !== true) throw new Error(reply?.error || "บันทึกขึ้น Google Sheets ไม่สำเร็จ");
+  return { ...merged, updatedAt: reply.updatedAt || "" };
 }
 
-async function doSync({ silent = true, pushAll = false } = {}) {
-  const endpoint = state.syncEndpoint;
-  if (!endpoint) return;
-  window.clearTimeout(syncRetryTimer);
-
-  const baseAtStart = syncBase;
-  const ops = pushAll ? pushAllOps(currentSnapshot()) : baseAtStart ? diffOps(baseAtStart, currentSnapshot()) : [];
-  if (!silent) setSyncStatus(ops.length ? "กำลังบันทึกขึ้น Google Sheets..." : "กำลังโหลดข้อมูลจาก Google Sheets...");
-
-  let remote = null;
-  let error = null;
-  let legacyServer = false;
-
-  if (ops.length) {
-    try {
-      const payload = await postToSheet(endpoint, { action: "applyOps", ops });
-      if (payload?.data) remote = normalizeRemoteData(payload);
-    } catch (err) {
-      error = err;
-      // Apps Script ยังเป็นเวอร์ชันเก่า (ยังไม่ได้ deploy โค้ดใหม่) → ใช้ saveAll แบบรวมข้อมูลก่อนส่งแทน
-      legacyServer = /unknown action/i.test(err.message || "");
-    }
-  }
-
-  if (!remote) {
-    try {
-      remote = await loadFromSheet(endpoint);
-    } catch (err) {
-      error = error || err;
-    }
-  }
-
-  if (remote) {
-    // เอาข้อมูลชีตล่าสุดเป็นฐาน แล้วใส่การเปลี่ยนแปลงของเครื่องนี้ที่ยังไม่ขึ้นชีตทับลงไป
-    const pending = pushAll
-      ? pushAllOps(currentSnapshot())
-      : baseAtStart
-        ? diffOps(baseAtStart, currentSnapshot())
-        : firstRunOps(remote);
-    const merged = applyOpsLocal(remote, pending);
-
-    if (legacyServer && pending.length) {
-      try {
-        const updatedAt = new Date().toISOString();
-        await postToSheet(endpoint, { action: "saveAll", data: { version: 1, updatedAt, ...merged } });
-        remote = { ...merged, updatedAt };
-        error = null;
-      } catch (err) {
-        error = err;
+// รับข้อมูลจากชีตมาเป็นหลัก แล้วทับด้วยคิวที่ยังไม่ได้ส่ง (รายการที่เพิ่งกรอกระหว่างรอจะไม่หาย)
+// ครั้งแรกหลังอัปเดตเป็นระบบคิว: รายการในเครื่องที่จดไว้ไม่เกิน 7 วันและยังไม่อยู่ในชีต
+// (ค้างจากเวอร์ชันเก่าที่ส่งไม่สำเร็จ) ให้ถือว่ารอส่ง แทนที่จะปล่อยให้ข้อมูลจากชีตทับทิ้ง
+function rescueUnsyncedOnce(remote) {
+  if (readStored(queueReadyStorageKey) === "1") return;
+  const remoteIds = new Set(remote.expenses.map((item) => String(item.id)));
+  const cutoff = Date.now() - 7 * 86400000;
+  queueChange(() => {
+    state.expenses.forEach((item) => {
+      const created = Number(item.id); // รหัสของเวอร์ชันเก่าคือเวลาที่สร้าง (มิลลิวินาที)
+      if (!remoteIds.has(String(item.id)) && created >= cutoff && created <= Date.now() && item.title && isValidDate(item.date)) {
+        markUpsert("expenses", item);
       }
-    }
+    });
+  });
+  // ทำเครื่องหมายว่าเสร็จ "หลัง" คิวถูกเขียนลงเครื่องแล้วเท่านั้น
+  writeStored(queueReadyStorageKey, "1");
+}
 
-    // ระหว่างรอเน็ต ผู้ใช้อาจแก้ข้อมูลเพิ่ม → ใส่ซ้ำอีกรอบก่อนแทนค่าในเครื่อง
-    const latestPending = pushAll || !baseAtStart ? pending : diffOps(baseAtStart, currentSnapshot());
-    const finalState = applyOpsLocal(remote, latestPending);
-    state.expenses = finalState.expenses;
-    state.recurring = finalState.recurring;
-    state.budget = finalState.budget || state.budget;
-    saveSyncBase({ expenses: remote.expenses, recurring: remote.recurring, budget: remote.budget, updatedAt: remote.updatedAt });
-    saveLocalSnapshot();
-    renderAll();
-  }
+// รายการส่วนใหญ่ของเครื่องนี้หายไปจากชีตพร้อมกัน (เช่น ชีตถูกล้าง ถูกสลับไฟล์ หรือเพิ่งเชื่อมชีตใหม่)
+// → ยังไม่ทับข้อมูลในเครื่อง ให้ผู้ใช้เลือกเองว่าจะส่งขึ้นไป หรือจะลบในเครื่องตามชีต
+let remoteHold = null;
+function looksWiped(remote, sent = pending) {
+  // ไม่นับรายการที่ยังอยู่ในคิวหรือเพิ่งส่งไปในรอบนี้ (ชีตย่อมยังไม่มี หรือเพิ่งมีเพราะเราส่งเอง)
+  const queued = { ...sent.expenses.upserts, ...pending.expenses.upserts };
+  const settled = state.expenses.filter((item) => !Object.hasOwn(queued, String(item.id)));
+  const remoteIds = new Set(remote.expenses.map((item) => String(item.id)));
+  const missing = settled.filter((item) => !remoteIds.has(String(item.id))).length;
+  // หายพร้อมกันตั้งแต่ 5 รายการและเกินครึ่งของที่เครื่องนี้มี = ผิดปกติ (การลบทีละรายการตามปกติไม่เข้าเงื่อนไขนี้)
+  return missing >= 5 && missing > settled.length / 2 ? missing : 0;
+}
 
-  const stillPending = syncBase ? diffOps(syncBase, currentSnapshot()).length : 0;
-  if (error) {
-    setSyncStatus(
-      `${error.message || "ซิงก์ไม่สำเร็จ"}${stillPending ? ` — มี ${stillPending} รายการรอส่ง ระบบจะลองใหม่อัตโนมัติ` : ""}`,
-      "error",
-    );
-    if (stillPending) scheduleSyncRetry(true);
+function resolveRemoteHold() {
+  const hold = remoteHold;
+  if (!hold) return;
+  const sendUp = window.confirm(
+    `Google Sheets ไม่มีรายจ่าย ${hold.localCount} รายการที่อยู่ในเครื่องนี้\n\nกด "ตกลง" = ส่งรายการในเครื่องนี้ขึ้น Google Sheets\nกด "ยกเลิก" = ไปขั้นถัดไป (ลบในเครื่องตามชีต)`,
+  );
+  if (sendUp) {
+    queueChange(() => {
+      state.expenses.filter((item) => item.title && isValidDate(item.date)).forEach((item) => markUpsert("expenses", item));
+      state.recurring.filter((item) => item.title).forEach((item) => markUpsert("recurring", item));
+      markBudget(state.budget);
+    });
+    remoteHold = null;
+    runSync({ manual: true });
     return;
   }
-
-  syncRetryDelay = 0;
-  if (stillPending) {
-    scheduleSyncRetry(false);
-  } else if (!silent || remote) {
-    const when = remote?.updatedAt ? ` (${new Date(remote.updatedAt).toLocaleString("th-TH")})` : "";
-    setSyncStatus(`${ops.length ? "บันทึกขึ้นชีตแล้ว" : "โหลดข้อมูลสำเร็จ"}${when}`, "good");
-  }
+  if (!window.confirm(`ลบรายจ่าย ${hold.localCount} รายการออกจากเครื่องนี้ ให้ตรงกับ Google Sheets ใช่ไหม? (กู้คืนไม่ได้)`)) return;
+  remoteHold = null;
+  adoptRemote(hold.remote, { force: true });
+  refreshSyncBadge();
 }
 
-function syncFromSheet() {
-  if (!state.syncEndpoint) {
-    openSync();
-    setSyncStatus("ใส่ลิงก์ Web App ก่อนโหลดข้อมูล", "error");
+function adoptRemote(remote, { force = false, sent } = {}) {
+  if (!force) {
+    const localCount = looksWiped(remote, sent);
+    if (localCount) {
+      remoteHold = { remote, localCount };
+      return;
+    }
+    remoteHold = null;
+  }
+  rescueUnsyncedOnce(remote);
+  state.expenses = applyOpGroup(remote.expenses, pending.expenses);
+  state.recurring = applyOpGroup(remote.recurring, pending.recurring);
+  state.budget = pending.budget ? clone(pending.budget) : remote.budget;
+  if (migrateRecurring()) scheduleSync(150);
+  persistLocal();
+  renderAll();
+}
+
+let syncing = false;
+let syncQueued = false;
+let syncTimer = null;
+let retryTimer = null;
+let retryDelay = 5000;
+let lastSyncError = "";
+let justPushed = false;
+let lastPullAt = 0;
+
+function scheduleSync(delay = 150) {
+  if (!state.syncEndpoint) return;
+  window.clearTimeout(syncTimer);
+  syncTimer = window.setTimeout(() => runSync(), delay);
+  refreshSyncBadge();
+}
+
+// ซิงก์ทีละรอบเท่านั้น (ไม่มีคำขอซ้อนกัน): ส่งคิวขึ้นชีต หรือถ้าคิวว่างก็โหลดข้อมูลล่าสุดลงมา
+// ถ้าเปิดแอปไว้หลายแท็บ ให้ซิงก์ได้ทีละแท็บ (Web Locks) คำตอบจากชีตจึงมาถึงตามลำดับเสมอ
+function runSync(options) {
+  if (!state.syncEndpoint) return Promise.resolve();
+  if (syncing) {
+    syncQueued = true;
     return Promise.resolve();
   }
-  return runSync({ silent: false });
+  syncing = true;
+  const run = () => syncOnce(options);
+  if (!navigator.locks?.request) return run();
+  // รอคิวจากแท็บอื่นไม่เกิน 10 วินาที — ถ้าแท็บนั้นค้าง (เช่น ถูกพักอยู่เบื้องหลัง) ก็ซิงก์ต่อเองได้เลย
+  return navigator.locks
+    .request("porsche-family-sync", { signal: AbortSignal.timeout(10000) }, run)
+    .catch((error) => (error?.name === "TimeoutError" || error?.name === "AbortError" ? run() : Promise.reject(error)));
 }
 
-function syncToSheet({ silent = false } = {}) {
-  if (!state.syncEndpoint) return Promise.resolve();
-  return runSync({ silent });
+async function syncOnce({ manual = false } = {}) {
+  window.clearTimeout(syncTimer);
+  window.clearTimeout(retryTimer);
+  const endpoint = state.syncEndpoint;
+  pending = loadPending();
+  const sent = clone(pending);
+  const pushing = pendingCount(sent) > 0;
+  if (manual) setSyncStatus(pushing ? "กำลังบันทึกขึ้น Google Sheets..." : "กำลังโหลดข้อมูลจาก Google Sheets...");
+  refreshSyncBadge();
+
+  try {
+    const remote = pushing ? await pushPending(endpoint, sent) : await loadVerified(endpoint);
+    if (endpoint !== state.syncEndpoint) return; // เปลี่ยนลิงก์ระหว่างรอ → ทิ้งผลลัพธ์นี้
+    if (pushing) {
+      clearSentPending(sent);
+      justPushed = true;
+    }
+    lastPullAt = Date.now();
+    lastSyncError = "";
+    retryDelay = 5000;
+    adoptRemote(remote, { sent });
+    const when = remote.updatedAt ? ` (${new Date(remote.updatedAt).toLocaleString("th-TH")})` : "";
+    if (remoteHold) setSyncStatus("Google Sheets ไม่มีรายการของเครื่องนี้ — แตะป้ายสีแดงด้านบนเพื่อเลือกว่าจะทำอย่างไร", "error");
+    else if (backendMode === "legacy") setSyncStatus(`ซิงก์แล้ว${when} — สคริปต์ใน Google Sheets ยังเป็นเวอร์ชันเก่า ควรอัปเดตตาม README`, "good");
+    else setSyncStatus(`ข้อมูลตรงกับ Google Sheets แล้ว${when}`, "good");
+  } catch (error) {
+    lastSyncError = syncErrorMessage(error);
+    setSyncStatus(lastSyncError, "error");
+    // ลองใหม่เองเป็นระยะ (5 วิ → สูงสุด 2 นาที) และเมื่อกลับมาออนไลน์/เปิดแอป
+    retryTimer = window.setTimeout(() => runSync(), retryDelay);
+    retryDelay = Math.min(retryDelay * 2, 120000);
+  } finally {
+    syncing = false;
+    refreshSyncBadge();
+    if (syncQueued || (!lastSyncError && pendingCount() > 0)) {
+      syncQueued = false;
+      scheduleSync(150);
+    }
+  }
 }
 
-let autoSyncTimer = null;
-let initialSyncDone = false;
-
-function queueAutoSync() {
-  if (!state?.syncEndpoint) return;
-  // รอบแรกตอนเปิดแอปจะเก็บการแก้ไขที่ค้างให้เองหลังโหลดเสร็จ
-  if (!initialSyncDone) return;
-  window.clearTimeout(autoSyncTimer);
-  autoSyncTimer = window.setTimeout(() => {
-    syncToSheet({ silent: true });
-  }, 900);
+// ผู้ใช้กำลังจะออกจากแอป: ถ้ายังมีคิวรอส่ง ให้ส่งทันทีไม่ต้องรอ
+function flushOnHide() {
+  if (!state.syncEndpoint || pendingCount() === 0 || syncing) return;
+  runSync();
 }
-
-window.addEventListener("online", () => {
-  if (state.syncEndpoint && initialSyncDone) runSync({ silent: true });
-});
 
 document.querySelectorAll(".add-expense-button, .add-expense-link").forEach((button) => {
   button.addEventListener("click", (event) => {
@@ -1575,22 +1831,35 @@ document.querySelector("[data-expense-form]")?.addEventListener("submit", (event
   const form = event.currentTarget;
   const data = new FormData(form);
   const id = data.get("id");
-  const payload = {
-    id: id ? Number(id) : Date.now(),
-    title: data.get("title").toString().trim(),
-    category: data.get("category"),
-    amount: Number(data.get("amount")),
-    date: data.get("date"),
-  };
-
-  if (id) {
-    state.expenses = state.expenses.map((item) => (String(item.id) === String(id) ? payload : item));
-  } else {
-    state.expenses = [payload, ...state.expenses];
-    state.month = monthOf(payload.date);
+  const title = data.get("title").toString().trim();
+  const amount = Number(data.get("amount"));
+  const date = String(data.get("date") || "");
+  if (!title) {
+    form.elements.title.value = "";
+    form.elements.title.reportValidity();
+    return;
+  }
+  if (!Number.isFinite(amount) || amount < 0 || !isValidDate(date)) {
+    window.alert("กรุณาตรวจจำนวนเงินและวันที่อีกครั้ง");
+    return;
   }
 
-  saveExpenses();
+  const fields = { title, category: data.get("category"), amount, date };
+  const existing = id ? state.expenses.find((item) => String(item.id) === String(id)) : null;
+  let record;
+  if (existing) {
+    // เก็บข้อมูลเดิมที่ฟอร์มไม่มี (เช่น ตัวเชื่อมกับรายจ่ายประจำ) ไว้ด้วย
+    record = { ...existing, ...fields };
+    state.expenses = state.expenses.map((item) => (item === existing ? record : item));
+  } else {
+    // รายการใหม่ หรือรายการที่กำลังแก้ถูกลบจากเครื่องอื่นไปแล้ว → บันทึกเป็นรายการใหม่ ไม่ทิ้ง
+    record = { id: newId(), ...fields };
+    state.expenses = [record, ...state.expenses];
+  }
+  state.month = monthOf(record.date);
+
+  queueChange(() => markUpsert("expenses", record));
+  commitChange();
   closeModal();
   renderAll();
 });
@@ -1601,13 +1870,15 @@ document.querySelector("[data-budget-form]")?.addEventListener("submit", (event)
   state.budget = {
     total: Number(form.elements.total.value || 0),
     categories: {
+      ...(state.budget.categories || {}),
       food: Number(form.elements.food.value || 0),
       travel: Number(form.elements.travel.value || 0),
       child: Number(form.elements.child.value || 0),
       home: Number(form.elements.home.value || 0),
     },
   };
-  saveBudget();
+  queueChange(() => markBudget(state.budget));
+  commitChange();
   closeBudget();
   renderAll();
 });
@@ -1619,49 +1890,74 @@ document.querySelector("[data-recurring-form]")?.addEventListener("submit", (eve
   const freq = data.get("freq") || "monthly";
   const editId = data.get("editId");
   const item = {
-    id: editId ? Number(editId) || editId : Date.now(),
+    id: editId ? Number(editId) || editId : newId(),
     title: data.get("title").toString().trim(),
     category: data.get("category"),
     amount: Number(data.get("amount")),
-    day: Number(data.get("day")) || 1,
+    day: Math.min(31, Math.max(1, Math.round(Number(data.get("day")) || 1))),
     freq,
     month: freq === "yearly" ? Number(data.get("month")) || 1 : null,
     end: freq === "yearly" ? "" : (data.get("end") || "").toString(),
   };
-  if (editId) {
-    state.recurring = (state.recurring || []).map((r) => (String(r.id) === String(editId) ? item : r));
+  if (!item.title) {
+    form.elements.title.value = "";
+    form.elements.title.reportValidity();
+    return;
+  }
+  // บิลรายปี: วันที่ต้องมีจริงในเดือนนั้น (เช่น 31 ก.พ. → 28 ก.พ.)
+  if (freq === "yearly") item.day = Math.min(item.day, daysInMonth(`2000-${String(item.month).padStart(2, "0")}`));
+  if (editId && (state.recurring || []).some((r) => String(r.id) === String(editId))) {
+    state.recurring = state.recurring.map((r) => (String(r.id) === String(editId) ? item : r));
   } else {
     state.recurring = [...(state.recurring || []), item];
   }
-  saveRecurring();
+  queueChange(() => markUpsert("recurring", item));
+  commitChange();
   closeRecurring();
   renderAll();
 });
 
+function readSyncForm() {
+  const form = document.querySelector("[data-sync-form]");
+  if (!form) return;
+  if (!saveSyncEndpoint(form.elements.endpoint.value)) {
+    setSyncStatus("ลิงก์ไม่ถูกต้อง ต้องเป็นลิงก์ Web App ของ Google Apps Script (https://script.google.com/macros/s/.../exec)", "error");
+    return false;
+  }
+  if (form.elements.syncKey) saveSyncKey(form.elements.syncKey.value);
+  return true;
+}
+
 document.querySelector("[data-sync-form]")?.addEventListener("submit", (event) => {
   event.preventDefault();
-  const endpoint = event.currentTarget.elements.endpoint.value;
-  saveSyncEndpoint(endpoint);
-  setSyncStatus(
-    state.syncEndpoint ? "บันทึกลิงก์แล้ว กด “บันทึกขึ้นชีต” เพื่อส่งข้อมูลชุดแรก" : "ลบลิงก์ Google Sheets แล้ว",
-    "good",
-  );
+  if (!readSyncForm()) return;
+  if (!state.syncEndpoint) {
+    setSyncStatus("ลบลิงก์ Google Sheets แล้ว", "good");
+    refreshSyncBadge();
+    return;
+  }
+  runSync({ manual: true });
 });
 
+// โหลดจากชีต: ดึงข้อมูลล่าสุดลงมา (รายการในเครื่องที่ยังไม่ได้ส่งจะถูกส่งขึ้นไปด้วย ไม่ถูกทับทิ้ง)
 document.querySelector("[data-sync-download]")?.addEventListener("click", () => {
-  const form = document.querySelector("[data-sync-form]");
-  if (form) saveSyncEndpoint(form.elements.endpoint.value);
-  syncFromSheet();
+  if (!readSyncForm()) return;
+  if (!state.syncEndpoint) {
+    setSyncStatus("ใส่ลิงก์ Web App ก่อนโหลดข้อมูล", "error");
+    return;
+  }
+  runSync({ manual: true });
 });
 
+// บันทึกขึ้นชีต: ส่งรายการที่ยังค้างในคิว (ถ้าชีตว่างและเครื่องนี้มีข้อมูล จะถามก่อนว่าจะส่งทั้งหมดขึ้นไปไหม)
 document.querySelector("[data-sync-upload]")?.addEventListener("click", () => {
-  const form = document.querySelector("[data-sync-form]");
-  if (form) saveSyncEndpoint(form.elements.endpoint.value);
+  if (!readSyncForm()) return;
   if (!state.syncEndpoint) {
     setSyncStatus("ใส่ลิงก์ Web App ก่อนบันทึกขึ้นชีต", "error");
     return;
   }
-  runSync({ silent: false, pushAll: true });
+  if (remoteHold) resolveRemoteHold();
+  else runSync({ manual: true });
 });
 
 document.querySelectorAll("[data-clear-data]").forEach((button) => {
@@ -1669,7 +1965,7 @@ document.querySelectorAll("[data-clear-data]").forEach((button) => {
 });
 
 document.querySelectorAll("[data-export-csv]").forEach((button) => {
-  button.addEventListener("click", exportCsv);
+  button.addEventListener("click", () => exportCsv({ all: button.dataset.exportCsv === "all" }));
 });
 
 document.querySelectorAll("[data-close-panels]").forEach((button) => {
@@ -1682,7 +1978,8 @@ document.body.addEventListener("click", (event) => {
     const exp = state.expenses.find((item) => String(item.id) === deleteButton.dataset.deleteId);
     if (!window.confirm(`ต้องการลบรายการ "${exp ? exp.title : ""}" ใช่ไหม?`)) return;
     state.expenses = state.expenses.filter((item) => String(item.id) !== deleteButton.dataset.deleteId);
-    saveExpenses();
+    queueChange(() => markDelete("expenses", deleteButton.dataset.deleteId));
+    commitChange();
     renderAll();
     return;
   }
@@ -1700,28 +1997,27 @@ document.body.addEventListener("click", (event) => {
     const today = new Date();
     const bill = (state.recurring || []).find((b) => String(b.id) === id);
     if (!bill) return;
+    let posted;
 
     if (bill.freq === "yearly") {
       const yr = today.getFullYear();
       if (!bill.month || yearlyPostedThisYear(bill.id, yr)) return;
-      const date = `${yr}-${String(bill.month).padStart(2, "0")}-${String(bill.day || 1).padStart(2, "0")}`;
-      state.expenses = [
-        { id: Date.now(), recurringId: bill.id, title: bill.title, category: bill.category, amount: Number(bill.amount), date },
-        ...state.expenses,
-      ];
+      const yearMonth = `${yr}-${String(bill.month).padStart(2, "0")}`;
+      const date = `${yearMonth}-${String(Math.min(Number(bill.day) || 1, daysInMonth(yearMonth))).padStart(2, "0")}`;
+      // รหัสตายตัวต่อบิลต่อปี: สองเครื่องกด "บันทึก" บิลเดียวกันจะได้รายการเดียว ไม่ซ้ำ
+      posted = { id: billPostId(bill.id, yr), recurringId: bill.id, title: bill.title, category: bill.category, amount: Number(bill.amount), date };
     } else {
       const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-      if (state.expenses.some((e) => e.recurringId === bill.id && monthOf(e.date) === monthKey)) return;
+      if (state.expenses.some((e) => sameId(e.recurringId, bill.id) && monthOf(e.date) === monthKey)) return;
       const last = daysInMonth(monthKey);
       const day = String(Math.min(Number(bill.day) || 1, last)).padStart(2, "0");
-      state.expenses = [
-        { id: Date.now(), recurringId: bill.id, title: bill.title, category: bill.category, amount: Number(bill.amount), date: `${monthKey}-${day}` },
-        ...state.expenses,
-      ];
+      posted = { id: billPostId(bill.id, monthKey), recurringId: bill.id, title: bill.title, category: bill.category, amount: Number(bill.amount), date: `${monthKey}-${day}` };
     }
+    state.expenses = [posted, ...state.expenses.filter((item) => String(item.id) !== String(posted.id))];
+    queueChange(() => markUpsert("expenses", posted));
 
-    state.month = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-    saveExpenses();
+    state.month = currentMonthKey();
+    commitChange();
     renderAll();
     return;
   }
@@ -1739,7 +2035,8 @@ document.body.addEventListener("click", (event) => {
     const bill = (state.recurring || []).find((item) => String(item.id) === id);
     if (!window.confirm(`ต้องการลบรายจ่ายประจำ "${bill ? bill.title : ""}" ใช่ไหม?`)) return;
     state.recurring = state.recurring.filter((item) => String(item.id) !== id);
-    saveRecurring();
+    queueChange(() => markDelete("recurring", id));
+    commitChange();
     renderAll();
   }
 });
@@ -1757,7 +2054,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=45").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=46").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
@@ -1770,56 +2067,86 @@ if ("serviceWorker" in navigator) {
 setView(location.hash.replace("#", "") || "home");
 renderAll();
 
-// ซิงก์สองทาง: โหลดข้อมูลล่าสุดจาก Google Sheet อัตโนมัติทุกครั้งที่เปิดแอป (ถ้าตั้งลิงก์ไว้แล้ว)
-// เปิด auto-save หลังโหลดเสร็จเท่านั้น เพื่อกันข้อมูลเก่าในเครื่องเขียนทับชีต
-// ย้ายข้อมูลเข้าระบบใหม่ครั้งเดียว: ใส่ freq ให้รายการเดิม, ใส่วันผ่อนครบรถ/iPhone, และเพิ่มรายจ่ายรายปีตั้งต้นถ้ายังไม่มี
+// ย้ายข้อมูลเข้าระบบใหม่ "ครั้งเดียวต่อเครื่อง": ใส่ freq ให้รายการเดิม, ใส่วันผ่อนครบรถ/iPhone,
+// และเพิ่มรายจ่ายรายปีตั้งต้นถ้ายังไม่มี (ทำหลังโหลดจากชีตสำเร็จเท่านั้น และไม่เติมซ้ำหลังผู้ใช้ลบเอง)
 function migrateRecurring() {
+  if (readStored(migrationStorageKey) === "1") return false;
   let changed = false;
+  pending = loadPending();
   (state.recurring || []).forEach((r) => {
+    let touched = false;
     if (!r.freq) {
       r.freq = "monthly";
-      changed = true;
+      touched = true;
     }
     if (INSTALLMENT_END[r.id] && !r.end) {
       r.end = INSTALLMENT_END[r.id];
+      touched = true;
+    }
+    if (touched) {
+      markUpsert("recurring", r);
       changed = true;
     }
   });
   if (!(state.recurring || []).some((r) => r.freq === "yearly")) {
-    YEARLY_BILLS.forEach((b) => state.recurring.push({ ...b, freq: "yearly" }));
+    YEARLY_BILLS.forEach((b) => {
+      const item = { ...b, freq: "yearly" };
+      state.recurring.push(item);
+      markUpsert("recurring", item);
+    });
     changed = true;
   }
+  savePending();
+  writeStored(migrationStorageKey, "1");
   return changed;
 }
 
+importOldSyncBase();
+
+// เปิดแอป: ส่งคิวที่ค้างจากรอบก่อน (ถ้ามี) แล้วโหลดข้อมูลล่าสุดจาก Google Sheet
+// ระหว่างรอ ผู้ใช้เพิ่มรายการได้ตามปกติ — รายการใหม่จะเข้าคิวและไม่ถูกข้อมูลจากชีตทับ
 if (state.syncEndpoint) {
-  Promise.resolve(syncFromSheet()).finally(() => {
-    initialSyncDone = true;
-    if (migrateRecurring()) {
-      saveRecurring();
-      renderAll();
-    }
-  });
-} else {
-  initialSyncDone = true;
-  if (migrateRecurring()) {
-    saveRecurring();
-    renderAll();
-  }
+  runSync();
+} else if (migrateRecurring()) {
+  persistLocal();
+  renderAll();
+}
+
+// เปิดแอปค้างข้ามเดือน → เลื่อนเดือนที่ดูอยู่ตามให้อัตโนมัติ (ไม่งั้นรายการวันนี้จะถูกลงเป็นเดือนก่อน)
+let knownCurrentMonth = currentMonthKey();
+function followMonthRollover() {
+  const now = currentMonthKey();
+  if (now === knownCurrentMonth) return;
+  if (state.month === knownCurrentMonth) state.month = now;
+  knownCurrentMonth = now;
+  renderAll();
 }
 
 // โหลดข้อมูลล่าสุดใหม่ทุกครั้งที่เปิด/สลับกลับมาที่แอป (สำคัญสำหรับไอคอนโฮม/PWA ที่ไม่รีเฟรชหน้าเอง)
-let lastResumeSync = Date.now();
 function refreshOnResume() {
-  if (!state.syncEndpoint || !initialSyncDone) return;
-  if (Date.now() - lastResumeSync < 8000) return; // กันยิงซ้ำ
-  lastResumeSync = Date.now();
-  syncFromSheet();
+  followMonthRollover();
+  if (!state.syncEndpoint) return;
+  if (pendingCount() === 0 && !lastSyncError && Date.now() - lastPullAt < 8000) return; // กันยิงซ้ำ
+  runSync();
 }
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") refreshOnResume();
+  else flushOnHide();
 });
+window.addEventListener("pagehide", flushOnHide);
 window.addEventListener("focus", refreshOnResume);
+window.addEventListener("online", () => runSync());
 window.addEventListener("pageshow", (e) => {
   if (e.persisted) refreshOnResume();
+});
+
+// อีกแท็บ/หน้าต่างของแอปเดียวกันบันทึกข้อมูล → อ่านค่าล่าสุดมาใช้ ไม่ให้แท็บนี้เขียนข้อมูลเก่าทับ
+window.addEventListener("storage", (event) => {
+  if (![storageKey, budgetStorageKey, recurringStorageKey, pendingStorageKey].includes(event.key)) return;
+  state.expenses = loadExpenses();
+  state.budget = loadBudget();
+  state.recurring = loadRecurring();
+  pending = loadPending();
+  renderAll();
+  refreshSyncBadge();
 });
