@@ -1704,8 +1704,58 @@ select:focus {
   .entry-modal input, .entry-modal select { font-size: 16px; }
 }
 /* ขณะเปิดฟอร์ม ย้ายป้ายสถานะขึ้นด้านบนและอยู่เหนือฟอร์ม จะได้เห็นว่าส่งขึ้นชีตแล้วหรือยัง */
-body:has(.entry-modal.open) .sync-badge {
+body.entry-open .sync-badge {
   top: calc(env(safe-area-inset-top, 0px) + 10px);
   bottom: auto;
   z-index: 30;
 }
+
+/* ===== v49: วันที่แตะครั้งเดียว, เลิกทำ ===== */
+.date-chips { display: flex; gap: 8px; margin-top: -4px; }
+.date-chips button {
+  flex: 1;
+  min-height: 40px;
+  border: 1px solid #f3dbe3;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: #9c7e87;
+  background: #fff;
+  cursor: pointer;
+}
+.date-chips button.is-active { color: #fff; border-color: #f85b8b; background: #f85b8b; }
+
+.note-undo,
+.undo-toast button {
+  margin-left: 6px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  background: #5b4e53;
+  cursor: pointer;
+}
+.undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 150px);
+  transform: translateX(-50%);
+  z-index: 19;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(92vw, 380px);
+  padding: 10px 10px 10px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: #3f3438;
+  box-shadow: 0 8px 24px rgba(60, 30, 40, 0.3);
+}
+.undo-toast[hidden] { display: none; }
+.undo-toast button { color: #3f3438; background: #ffd9e4; }
