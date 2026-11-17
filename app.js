@@ -482,13 +482,35 @@ function dueSoonRecurring() {
   const todayMid = new Date(y, m, today.getDate());
   return monthlyBills()
     .filter((r) => {
-      if (installmentEnded(r)) return false;
+      if (installmentEnded(r) || isBillSkipped(r)) return false;
       const day = Math.min(Number(r.day) || 1, last);
       const diff = Math.round((new Date(y, m, day) - todayMid) / 86400000);
       const postedThisMonth = state.expenses.some((e) => sameId(e.recurringId, r.id) && monthOf(e.date) === monthKey);
       return diff <= 0 && !postedThisMonth;
     })
     .sort((a, b) => (Number(a.day) || 1) - (Number(b.day) || 1));
+}
+
+// บิลที่ผู้ใช้กด "ข้าม" สำหรับงวดนั้น (จ่ายแล้วแต่ไม่ต้องการจด หรือไม่ได้จ่ายงวดนี้) — จำไว้ในเครื่องนี้
+const skippedBillsStorageKey = "porsche-family-skipped-bills";
+function loadSkippedBills() {
+  try {
+    const parsed = JSON.parse(readStored(skippedBillsStorageKey) || "{}");
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+let skippedBills = loadSkippedBills();
+function billPeriod(bill) {
+  return bill.freq === "yearly" ? String(new Date().getFullYear()) : currentMonthKey();
+}
+function isBillSkipped(bill) {
+  return Object.hasOwn(skippedBills, `${bill.id}|${billPeriod(bill)}`);
+}
+function skipBill(bill) {
+  skippedBills[`${bill.id}|${billPeriod(bill)}`] = 1;
+  writeStored(skippedBillsStorageKey, JSON.stringify(skippedBills));
 }
 
 function yearlyPostedThisYear(id, year) {
@@ -501,7 +523,7 @@ function yearlyDueSoon() {
   const y = today.getFullYear();
   const todayMid = new Date(y, today.getMonth(), today.getDate());
   return yearlyBills().filter((b) => {
-    if (!b.month) return false;
+    if (!b.month || isBillSkipped(b)) return false;
     const diff = Math.round((new Date(y, b.month - 1, b.day || 1) - todayMid) / 86400000);
     return diff <= 0 && !yearlyPostedThisYear(b.id, y);
   });
@@ -514,6 +536,7 @@ function reminderRow(item, whenText) {
     <b>${esc(item.title)}<small>⏰ ${whenText}</small></b>
     <strong>฿ ${money.format(item.amount)}</strong>
     <button class="small-pill" type="button" data-post-recurring="${esc(item.id)}">บันทึก</button>
+    <button class="small-pill is-quiet" type="button" data-skip-recurring="${esc(item.id)}" aria-label="ข้าม ${esc(item.title)} งวดนี้">ข้าม</button>
   </li>`;
 }
 
@@ -736,10 +759,21 @@ function renderCategoryViews() {
   // สร้างป้ายหมวดรอบโดนัทใหญ่อัตโนมัติจากทุกหมวด (กระจายตำแหน่งเท่าๆ กันรอบวง)
   document.querySelectorAll("[data-big-donut]").forEach((donut) => {
     donut.querySelectorAll(".chart-label").forEach((el) => el.remove());
-    const n = items.length;
+    // ป้ายเฉพาะหมวดที่มียอด วางตรงกลางชิ้นของหมวดนั้น แล้วถ่างออกไม่ให้ป้ายซ้อนกัน
+    const shown = items.filter((item) => item.total > 0);
     const cx = 119, cy = 119, rx = 150, ry = 142;
-    items.forEach((item, i) => {
-      const angle = (i / n) * 2 * Math.PI - Math.PI / 2;
+    const gap = 0.52;
+    let cursor = 0;
+    const angles = shown.map((item) => {
+      const mid = ((cursor + item.total / 2) / total) * 2 * Math.PI;
+      cursor += item.total;
+      return mid;
+    });
+    for (let i = 1; i < angles.length; i += 1) angles[i] = Math.max(angles[i], angles[i - 1] + gap);
+    const overflow = angles.length > 1 ? angles[angles.length - 1] - (angles[0] + 2 * Math.PI - gap) : 0;
+    if (overflow > 0) for (let i = 0; i < angles.length; i += 1) angles[i] -= overflow * (i / (angles.length - 1));
+    shown.forEach((item, i) => {
+      const angle = angles[i] - Math.PI / 2;
       const x = cx + rx * Math.cos(angle);
       const y = cy + ry * Math.sin(angle);
       const span = document.createElement("span");
@@ -914,9 +948,19 @@ function renderTransactions() {
   const full = document.querySelector("[data-full-transaction-list]");
   const filtered = sortedByDate(filteredExpenses());
   if (full) {
-    full.innerHTML = filtered.length
-      ? filtered.map((item) => transactionMarkup(item, true)).join("")
-      : `<li class="empty-row"><b>ยังไม่มีรายการตามตัวกรอง</b></li>`;
+    // จัดกลุ่มตามวัน พร้อมยอดรวมของแต่ละวัน
+    let html = "";
+    let lastDay = null;
+    filtered.forEach((item) => {
+      const day = toISODate(item.date);
+      if (day !== lastDay) {
+        lastDay = day;
+        const dayItems = filtered.filter((other) => toISODate(other.date) === day);
+        html += `<li class="day-head"><b>${esc(formatDate(day))}</b><span>${dayItems.length} รายการ</span><strong>฿ ${money.format(sum(dayItems))}</strong></li>`;
+      }
+      html += transactionMarkup(item, true);
+    });
+    full.innerHTML = filtered.length ? html : `<li class="empty-row"><b>ยังไม่มีรายการตามตัวกรอง</b></li>`;
   }
 
   document.querySelectorAll("[data-record-count]").forEach((el) => {
@@ -1097,14 +1141,65 @@ function openModal(item = null) {
   } else {
     document.querySelector("[data-modal-heading]").textContent = "เพิ่มรายจ่าย";
     document.querySelector("[data-submit-label]").textContent = "บันทึก";
+    const lastCategory = readStored(lastCategoryStorageKey);
+    if (form && lastCategory && categories[lastCategory]) form.elements.category.value = lastCategory;
     // ดูเดือนปัจจุบันอยู่ → วันนี้ / ดูเดือนย้อนหลังอยู่ → วันเดียวกันของเดือนนั้น (ไว้กรอกย้อนหลัง)
     if (dateInput) dateInput.value = state.month === currentMonthKey() ? todayKey() : selectedMonthDate(new Date().getDate());
   }
+
+  renderQuickPicks(!item);
+  document.querySelectorAll("[data-save-again]").forEach((button) => {
+    button.hidden = Boolean(item);
+  });
+  const note = document.querySelector("[data-saved-note]");
+  if (note) note.hidden = true;
 
   modal?.classList.add("open");
   modal?.setAttribute("aria-hidden", "false");
   form?.elements.title.focus();
 }
+
+const lastCategoryStorageKey = "porsche-family-last-category";
+
+// รายการที่จดบ่อย (จาก 150 รายการล่าสุด) — แตะแล้วเติมชื่อ หมวด และจำนวนเงินครั้งล่าสุดให้
+function frequentEntries(limit = 6) {
+  const seen = new Map();
+  state.expenses
+    .filter((item) => item.title && !item.recurringId)
+    .slice()
+    .sort((a, b) => Number(b.id) - Number(a.id))
+    .slice(0, 150)
+    .forEach((item) => {
+      const key = `${String(item.title).trim().toLowerCase()}|${item.category}`;
+      const entry = seen.get(key);
+      if (entry) entry.count += 1;
+      else seen.set(key, { title: String(item.title).trim(), category: item.category, amount: Number(item.amount || 0), count: 1 });
+    });
+  return [...seen.values()].sort((a, b) => b.count - a.count).slice(0, limit);
+}
+
+let quickPicks = [];
+function renderQuickPicks(show) {
+  const box = document.querySelector("[data-quick-picks]");
+  if (!box) return;
+  quickPicks = show ? frequentEntries() : [];
+  box.hidden = quickPicks.length === 0;
+  box.innerHTML = quickPicks
+    .map((entry, index) => `<button type="button" class="quick-pick" data-quick-pick="${index}">${esc(entry.title)}</button>`)
+    .join("");
+}
+
+document.querySelector("[data-quick-picks]")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-quick-pick]");
+  const entry = button && quickPicks[Number(button.dataset.quickPick)];
+  const form = document.querySelector("[data-expense-form]");
+  if (!entry || !form) return;
+  form.elements.title.value = entry.title;
+  if (categories[entry.category]) form.elements.category.value = entry.category;
+  form.elements.amount.value = entry.amount || "";
+  form.elements.amount.focus();
+  form.elements.amount.select();
+});
 
 function closeModal() {
   const modal = document.querySelector("[data-entry-modal]");
@@ -1408,7 +1503,7 @@ function requestSheetAction(endpoint, params) {
     const timer = window.setTimeout(() => {
       cleanup();
       reject(new Error("เชื่อมต่อ Google Sheets ช้าเกินไป"));
-    }, 35000);
+    }, 75000);
 
     function cleanup() {
       window.clearTimeout(timer);
@@ -1460,7 +1555,9 @@ async function loadVerified(endpoint) {
 
 async function postToSheet(endpoint, body, { keepalive = false } = {}) {
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 30000);
+  // สคริปต์ชีตอาจใช้เวลาบันทึกเกือบหนึ่งนาทีเมื่อข้อมูลเยอะ — ถ้าตัดเร็วกว่านั้น งานฝั่งชีตยังเดินต่อจนเสร็จ
+  // แต่แอปจะเข้าใจว่าล้มเหลวแล้วส่งซ้ำวนไป จึงรอให้นานพอ
+  const timer = window.setTimeout(() => controller.abort(), 150000);
   try {
     const text = JSON.stringify({ ...body, key: loadSyncKey() || undefined });
     const response = await fetch(endpoint, {
@@ -1860,6 +1957,20 @@ document.querySelector("[data-expense-form]")?.addEventListener("submit", (event
 
   queueChange(() => markUpsert("expenses", record));
   commitChange();
+  writeStored(lastCategoryStorageKey, String(record.category));
+
+  // "บันทึกและเพิ่มต่อ": เปิดฟอร์มว่างต่อทันที คงวันที่เดิมไว้ (สะดวกเวลาจดหลายรายการของวันเดียวกัน)
+  if (!existing && event.submitter?.hasAttribute("data-save-again")) {
+    renderAll();
+    openModal();
+    form.elements.date.value = record.date;
+    const note = document.querySelector("[data-saved-note]");
+    if (note) {
+      note.textContent = `บันทึก “${record.title}” ฿${money.format(record.amount)} แล้ว ✓`;
+      note.hidden = false;
+    }
+    return;
+  }
   closeModal();
   renderAll();
 });
@@ -2022,6 +2133,16 @@ document.body.addEventListener("click", (event) => {
     return;
   }
 
+  const skipButton = event.target.closest("[data-skip-recurring]");
+  if (skipButton) {
+    const bill = (state.recurring || []).find((b) => String(b.id) === skipButton.dataset.skipRecurring);
+    if (bill) {
+      skipBill(bill);
+      renderAll();
+    }
+    return;
+  }
+
   const editRecurringButton = event.target.closest("[data-edit-recurring]");
   if (editRecurringButton) {
     const r = (state.recurring || []).find((x) => String(x.id) === editRecurringButton.dataset.editRecurring);
@@ -2054,7 +2175,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=46").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=47").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
