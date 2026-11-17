@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="app-icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=48" />
+    <link rel="stylesheet" href="styles.css?v=49" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -408,6 +408,11 @@
               <input name="date" type="date" required />
             </label>
           </div>
+          <div class="date-chips" aria-label="เลือกวันที่เร็ว">
+            <button type="button" data-date-chip="0">วันนี้</button>
+            <button type="button" data-date-chip="1">เมื่อวาน</button>
+            <button type="button" data-date-chip="2">2 วันก่อน</button>
+          </div>
           <div class="form-actions">
             <button class="ghost-button" type="button" data-close-panels>ยกเลิก</button>
             <button class="save-button" type="submit" data-submit-label>บันทึก</button>
@@ -583,6 +588,6 @@
         </form>
       </div>
     </div>
-    <script src="app.js?v=48"></script>
+    <script src="app.js?v=49"></script>
   </body>
 </html>
