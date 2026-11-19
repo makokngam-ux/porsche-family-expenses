@@ -1816,3 +1816,27 @@ body.entry-open .sync-badge {
   color: #fff;
   background: #f85b8b;
 }
+
+/* ===== v51: ช่องตัวกรอง "เดือน" และ "หมวดหมู่" ให้สูงเท่ากันและหน้าตาเดียวกัน (iPhone วาดสองช่องนี้ไม่เหมือนกัน) ===== */
+.filter-panel label { display: flex; flex-direction: column; }
+.filter-panel input[type="month"],
+.filter-panel select {
+  display: block;
+  height: 46px;
+  min-height: 46px;
+  margin: 0;
+  padding: 0 34px 0 14px;
+  line-height: 44px;
+  font-size: 16px;
+  text-align: left;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%239c7e87' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 12px 8px;
+}
+.filter-panel select { text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
+.filter-panel input[type="month"]::-webkit-date-and-time-value { margin: 0; text-align: left; line-height: 44px; }
+.filter-panel input[type="month"]::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.filter-panel input[type="month"] { position: relative; }
