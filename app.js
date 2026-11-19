@@ -326,6 +326,91 @@ function markDelete(kind, id) {
   if (!pending[kind].deletes.includes(key)) pending[kind].deletes.push(key);
 }
 
+// ===== รายการใหม่ที่อีกเครื่องเพิ่มเข้ามา =====
+// จำรหัสรายการที่ "โผล่มาจากชีตโดยเครื่องนี้ไม่ได้จดเอง" ไว้จนกว่าผู้ใช้จะกดรับทราบ (เก็บเฉพาะในเครื่อง ไม่ส่งขึ้นชีต)
+const newIdsStorageKey = "porsche-family-new-ids";
+const newReadyStorageKey = "porsche-family-new-ready";
+const NEW_IDS_LIMIT = 300;
+
+function loadNewIds() {
+  try {
+    const parsed = JSON.parse(readStored(newIdsStorageKey) || "[]");
+    return Array.isArray(parsed) ? parsed.map(String).slice(0, NEW_IDS_LIMIT) : [];
+  } catch {
+    return [];
+  }
+}
+
+let newIds = loadNewIds();
+let newListOpen = false;
+
+function saveNewIds() {
+  writeStored(newIdsStorageKey, JSON.stringify(newIds));
+}
+
+// เรียกหลังรับข้อมูลจากชีตแล้ว: beforeIds = รหัสรายจ่ายที่เครื่องนี้มีอยู่ก่อนรับ
+// ownIds = รหัสที่เครื่องนี้จดเองและอยู่ในคิว/เพิ่งส่ง (กันนับรายการของตัวเองเมื่อข้อมูลแสดงผลในเครื่องเขียนไม่ทัน)
+function trackNewFromRemote(beforeIds, ownIds = new Set()) {
+  const current = new Set(state.expenses.map((item) => String(item.id)));
+  // ครั้งแรกของเครื่องนี้ (ยังไม่เคยมีข้อมูล) = โหลดข้อมูลตั้งต้น ไม่ถือว่าเป็นรายการใหม่
+  const ready = readStored(newReadyStorageKey) === "1" || beforeIds.size > 0;
+  writeStored(newReadyStorageKey, "1");
+  const kept = loadNewIds().filter((id) => current.has(id));
+  const known = new Set(kept);
+  const fresh = ready ? state.expenses.map((item) => String(item.id)).filter((id) => !beforeIds.has(id) && !ownIds.has(id) && !known.has(id)) : [];
+  newIds = [...fresh, ...kept].slice(0, NEW_IDS_LIMIT);
+  saveNewIds();
+}
+
+function newExpenses() {
+  if (!newIds.length) return [];
+  const wanted = new Set(newIds);
+  return state.expenses.filter((item) => wanted.has(String(item.id)));
+}
+
+function acknowledgeNew() {
+  newIds = [];
+  newListOpen = false;
+  saveNewIds();
+  renderAll();
+}
+
+function renderNewBanner() {
+  const items = newExpenses();
+  document.querySelectorAll("[data-new-banner]").forEach((banner) => {
+    banner.hidden = items.length === 0;
+    if (!items.length) {
+      banner.innerHTML = "";
+      return;
+    }
+    const shown = sortedByDate(items).slice(0, 20);
+    const rows = shown
+      .map((item) => {
+        const category = categories[item.category] || categories.other;
+        return `<li><b>${esc(item.title)}<small>${category.label} · ${esc(formatDate(item.date))}</small></b><strong>฿ ${money.format(item.amount)}</strong></li>`;
+      })
+      .join("");
+    const more = items.length > shown.length ? `<li class="more">และอีก ${items.length - shown.length} รายการ</li>` : "";
+    banner.innerHTML = `<div class="new-banner-head">
+        <span class="new-banner-icon">${iconMarkup("i-bell")}</span>
+        <b>มีรายการใหม่จากอีกเครื่อง ${items.length} รายการ<small>รวม ฿ ${money.format(sum(items))}</small></b>
+      </div>
+      <ul class="new-banner-list"${newListOpen ? "" : " hidden"}>${rows}${more}</ul>
+      <div class="new-banner-actions">
+        <button type="button" class="small-pill is-quiet" data-new-toggle aria-expanded="${newListOpen}">${newListOpen ? "ซ่อนรายการ" : "ดูรายการ"}</button>
+        <button type="button" class="small-pill" data-new-ack>รับทราบ</button>
+      </div>`;
+  });
+}
+
+document.body.addEventListener("click", (event) => {
+  if (event.target.closest("[data-new-ack]")) acknowledgeNew();
+  else if (event.target.closest("[data-new-toggle]")) {
+    newListOpen = !newListOpen;
+    renderNewBanner();
+  }
+});
+
 // นำคิวไปทับลงบนรายการชุดหนึ่ง: ลบที่สั่งลบ, แทนที่ที่แก้, เติมรายการใหม่ไว้บนสุด
 function applyOpGroup(list, group) {
   const deleted = new Set(group.deletes);
@@ -954,7 +1039,7 @@ function transactionMarkup(item, editable = false) {
   const category = categories[item.category] || categories.other;
   return `<li>
     ${iconBadge(item.category)}
-    <b>${esc(item.title)}<small>${category.label}</small></b>
+    <b>${esc(item.title)}${newIds.includes(String(item.id)) ? ` <i class="new-tag">ใหม่</i>` : ""}<small>${category.label}</small></b>
     <strong>฿ ${money.format(item.amount)}</strong>
     <em>${esc(formatDate(item.date))}</em>
     <button class="edit-expense" type="button" data-edit-id="${esc(item.id)}" aria-label="แก้ไข ${esc(item.title)}">${iconMarkup("i-edit")}</button>
@@ -1069,6 +1154,7 @@ function renderAll() {
   renderAlerts();
   renderTrend();
   renderDailyChart();
+  renderNewBanner();
 }
 
 // กราฟแท่งรายวัน — ยอดรวมที่บันทึกจริงของแต่ละวันในเดือนที่เลือก
@@ -1855,10 +1941,12 @@ function adoptRemote(remote, { force = false, sent } = {}) {
     remoteHold = null;
   }
   rescueUnsyncedOnce(remote);
+  const beforeIds = new Set(state.expenses.map((item) => String(item.id)));
   state.expenses = applyOpGroup(remote.expenses, pending.expenses);
   state.recurring = applyOpGroup(remote.recurring, pending.recurring);
   state.budget = pending.budget ? clone(pending.budget) : remote.budget;
   if (migrateRecurring()) scheduleSync(150);
+  trackNewFromRemote(beforeIds, new Set([...Object.keys(sent?.expenses?.upserts || {}), ...Object.keys(pending.expenses.upserts)]));
   persistLocal();
   renderAll();
 }
@@ -2392,7 +2480,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=49").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=50").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
@@ -2480,7 +2568,8 @@ window.addEventListener("pageshow", (e) => {
 
 // อีกแท็บ/หน้าต่างของแอปเดียวกันบันทึกข้อมูล → อ่านค่าล่าสุดมาใช้ ไม่ให้แท็บนี้เขียนข้อมูลเก่าทับ
 window.addEventListener("storage", (event) => {
-  if (![storageKey, budgetStorageKey, recurringStorageKey, pendingStorageKey, skippedBillsStorageKey].includes(event.key)) return;
+  if (![storageKey, budgetStorageKey, recurringStorageKey, pendingStorageKey, skippedBillsStorageKey, newIdsStorageKey].includes(event.key)) return;
+  newIds = loadNewIds();
   state.expenses = loadExpenses();
   state.budget = loadBudget();
   state.recurring = loadRecurring();
