@@ -1852,3 +1852,7 @@ body.entry-open .sync-badge {
 .new-banner-actions .small-pill { color: #fff; background: #f0a020; }
 .new-banner-actions .small-pill.is-quiet { color: #8a6a1c; background: #fbe9b0; }
 .new-tag { background: #f0a020; }
+
+/* ===== v53: แท็บ "รายปี" (4 แท็บ) ===== */
+.segment { grid-template-columns: repeat(4, 1fr); }
+.segment button { padding: 0 2px; font-size: 12.5px; }
