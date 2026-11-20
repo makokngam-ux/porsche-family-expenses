@@ -641,12 +641,17 @@ function yearlyDueSoon() {
   });
 }
 
+// บิลที่ตั้งยอดเป็น 0 = บิลไม่ระบุยอด (ยอดแต่ละงวดไม่เท่ากัน เช่น ค่าน้ำมัน) → ไม่โชว์ตัวเลข ให้กรอกตอนบันทึก
+function billAmountText(item) {
+  return Number(item.amount) > 0 ? `฿ ${money.format(item.amount)}` : "กรอกยอดเอง";
+}
+
 function reminderRow(item, whenText) {
   const category = categories[item.category] || categories.other;
   return `<li class="due-reminder">
     <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
     <b>${esc(item.title)}<small>⏰ ${whenText}</small></b>
-    <strong>฿ ${money.format(item.amount)}</strong>
+    <strong${Number(item.amount) > 0 ? "" : ' class="amount-open"'}>${billAmountText(item)}</strong>
     <button class="small-pill" type="button" data-post-recurring="${esc(item.id)}">บันทึก</button>
     <button class="small-pill is-quiet" type="button" data-skip-recurring="${esc(item.id)}" aria-label="ซ่อนการเตือน ${esc(item.title)} งวดนี้">ซ่อน</button>
   </li>`;
@@ -922,6 +927,7 @@ function renderRecurring() {
           const category = categories[item.category] || categories.other;
           const remain = monthsRemaining(item);
           let note = `${category.label} · ทุกวันที่ ${item.day}`;
+          if (!(Number(item.amount) > 0)) note += " · ไม่ระบุยอด";
           if (remain !== null) {
             note += installmentEnded(item)
               ? " · ผ่อนครบแล้ว ✓"
@@ -930,7 +936,7 @@ function renderRecurring() {
           return `<li>
     <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
             <b>${esc(item.title)}<small>${esc(note)}</small></b>
-            <strong>฿ ${money.format(item.amount)}</strong>
+            <strong${Number(item.amount) > 0 ? "" : ' class="amount-open"'}>${Number(item.amount) > 0 ? `฿ ${money.format(item.amount)}` : "ไม่ระบุยอด"}</strong>
             <button class="edit-expense" type="button" data-edit-recurring="${esc(item.id)}" aria-label="แก้ไข ${esc(item.title)}">${iconMarkup("i-edit")}</button>
             <button class="delete-expense" type="button" data-delete-recurring="${esc(item.id)}" aria-label="ลบ ${esc(item.title)}">${iconMarkup("i-trash")}</button>
           </li>`;
@@ -1225,8 +1231,8 @@ function renderYearly() {
           const due = item.month ? `${item.day || 1} ${THAI_MONTHS[item.month - 1]}` : "-";
           return `<li>
       <span class="category-icon" style="--cat-color:${category.color}; --cat-bg:${softColor(category.color)}">${iconMarkup("i-repeat")}</span>
-      <b>${esc(item.title)}<small>${category.label} · ครบกำหนด ${esc(due)} ทุกปี</small></b>
-      <strong>฿ ${money.format(item.amount)}</strong>
+      <b>${esc(item.title)}<small>${category.label} · ครบกำหนด ${esc(due)} ทุกปี${Number(item.amount) > 0 ? "" : " · ไม่ระบุยอด"}</small></b>
+      <strong${Number(item.amount) > 0 ? "" : ' class="amount-open"'}>${Number(item.amount) > 0 ? `฿ ${money.format(item.amount)}` : "ไม่ระบุยอด"}</strong>
       <button class="edit-expense" type="button" data-edit-recurring="${esc(item.id)}" aria-label="แก้ไข ${esc(item.title)}">${iconMarkup("i-edit")}</button>
       <button class="delete-expense" type="button" data-delete-recurring="${esc(item.id)}" aria-label="ลบ ${esc(item.title)}">${iconMarkup("i-trash")}</button>
     </li>`;
@@ -1248,11 +1254,13 @@ function openBillModal(posted) {
   document.querySelector("[data-modal-heading]").textContent = "บันทึกบิลประจำ";
   document.querySelector("[data-submit-label]").textContent = "ยืนยันบันทึก";
   const note = document.querySelector("[data-saved-note]");
+  const openAmount = !(Number(posted.amount) > 0);
   if (note) {
-    note.textContent = `ยอดตั้งต้น ฿${money.format(posted.amount)} · แก้เป็นยอดของงวดนี้ได้ก่อนกดยืนยัน`;
+    note.textContent = openAmount ? "บิลนี้ไม่ระบุยอด · กรอกยอดของงวดนี้แล้วกดยืนยัน" : `ยอดตั้งต้น ฿${money.format(posted.amount)} · แก้เป็นยอดของงวดนี้ได้ก่อนกดยืนยัน`;
     note.hidden = false;
   }
   const amountInput = document.querySelector("[data-expense-form]")?.elements.amount;
+  if (openAmount && amountInput) amountInput.value = "";
   amountInput?.focus();
   amountInput?.select?.();
 }
@@ -1536,7 +1544,7 @@ function openRecurring(opts = {}) {
   if (item) {
     form.elements.title.value = item.title || "";
     form.elements.category.value = item.category || "other";
-    form.elements.amount.value = item.amount || "";
+    form.elements.amount.value = item.amount === undefined || item.amount === null ? "" : item.amount;
     form.elements.day.value = item.day || "";
     if (item.month) form.elements.month.value = item.month;
     if (item.end) form.elements.end.value = item.end;
@@ -2243,6 +2251,12 @@ document.querySelector("[data-expense-form]")?.addEventListener("submit", (event
     return;
   }
 
+  if (pendingBill && String(pendingBill.id) === String(id) && !(amount > 0)) {
+    window.alert("กรุณากรอกยอดของงวดนี้");
+    form.elements.amount.focus();
+    return;
+  }
+
   const fields = { title, category: data.get("category"), amount, date };
   const existing = id ? state.expenses.find((item) => String(item.id) === String(id)) : null;
   let record;
@@ -2503,7 +2517,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=53").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=54").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
