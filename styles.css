@@ -1840,3 +1840,15 @@ body.entry-open .sync-badge {
 .filter-panel input[type="month"]::-webkit-date-and-time-value { margin: 0; text-align: left; line-height: 44px; }
 .filter-panel input[type="month"]::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .filter-panel input[type="month"] { position: relative; }
+
+/* ===== v52: ป้ายแจ้งรายการใหม่เป็นสีเหลืองครีม ให้เด่นจากการ์ดสีชมพูอื่น ๆ ===== */
+.new-banner { border-color: #f6d77a; background: #fff6d9; box-shadow: 0 10px 22px rgba(214, 160, 40, 0.2); }
+.new-banner-icon { background: #f0a020; }
+.new-banner-head b { color: #4a3510; }
+.new-banner-head small { color: #a86500; }
+.new-banner-list { border-top-color: #f3dc9a; }
+.new-banner-list li { border-bottom-color: #f7e7b8; color: #4a3510; }
+.new-banner-list small, .new-banner-list li.more { color: #8a6a1c; }
+.new-banner-actions .small-pill { color: #fff; background: #f0a020; }
+.new-banner-actions .small-pill.is-quiet { color: #8a6a1c; background: #fbe9b0; }
+.new-tag { background: #f0a020; }
