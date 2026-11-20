@@ -35,6 +35,7 @@ const categories = {
   education: { label: "การศึกษา", icon: "i-grad", color: "#ffd978", group: "education" },
   health: { label: "สุขภาพ", icon: "i-health", color: "#8de0c4", group: "health" },
   car: { label: "รถยนต์", icon: "i-steering", color: "#8fcdee", group: "daily" },
+  fuel: { label: "ค่าน้ำมัน", icon: "i-fuel", color: "#4f86c6", group: "daily" },
   subscription: { label: "ค่าสมาชิก / แอป", icon: "i-apps", color: "#a9a0ef", group: "lifestyle" },
   installment: { label: "ผ่อนชำระ", icon: "i-card", color: "#ffb38a", group: "daily" },
   other: { label: "อื่นๆ", icon: "i-more", color: "#dcd6ed", group: "daily" },
@@ -767,7 +768,7 @@ function renderLabels() {
   });
   document.querySelectorAll("[data-report-month]").forEach((el) => {
     el.textContent =
-      state.period === "all" ? "ทั้งหมด (ทุกเดือน)" : formatMonth(state.month);
+      state.period === "all" ? "ทั้งหมด (ทุกเดือน)" : state.period === "year" ? `ทั้งปี ${Number(state.month.slice(0, 4)) + 543}` : formatMonth(state.month);
   });
   document.querySelectorAll("[data-month-filter]").forEach((el) => {
     el.value = state.month;
@@ -1238,7 +1239,26 @@ function renderYearly() {
   });
 }
 
+// บิลประจำที่กำลังยืนยันยอดในฟอร์ม (กด "บันทึก" ที่บิล → เปิดฟอร์มให้แก้ยอดของงวดนี้ก่อนลงจริง)
+let pendingBill = null;
+
+function openBillModal(posted) {
+  openModal(posted);
+  pendingBill = { id: posted.id, recurringId: posted.recurringId };
+  document.querySelector("[data-modal-heading]").textContent = "บันทึกบิลประจำ";
+  document.querySelector("[data-submit-label]").textContent = "ยืนยันบันทึก";
+  const note = document.querySelector("[data-saved-note]");
+  if (note) {
+    note.textContent = `ยอดตั้งต้น ฿${money.format(posted.amount)} · แก้เป็นยอดของงวดนี้ได้ก่อนกดยืนยัน`;
+    note.hidden = false;
+  }
+  const amountInput = document.querySelector("[data-expense-form]")?.elements.amount;
+  amountInput?.focus();
+  amountInput?.select?.();
+}
+
 function openModal(item = null) {
+  pendingBill = null;
   const modal = document.querySelector("[data-entry-modal]");
   const form = document.querySelector("[data-expense-form]");
   const dateInput = form?.elements.date;
@@ -1454,6 +1474,7 @@ document.body.addEventListener("click", (event) => {
 });
 
 function closeModal() {
+  pendingBill = null;
   clearEntryDraft();
   document.body.classList.remove("entry-open");
   const modal = document.querySelector("[data-entry-modal]");
@@ -2229,16 +2250,22 @@ document.querySelector("[data-expense-form]")?.addEventListener("submit", (event
     // เก็บข้อมูลเดิมที่ฟอร์มไม่มี (เช่น ตัวเชื่อมกับรายจ่ายประจำ) ไว้ด้วย
     record = { ...existing, ...fields };
     state.expenses = state.expenses.map((item) => (item === existing ? record : item));
+  } else if (pendingBill && String(pendingBill.id) === String(id)) {
+    // ยืนยันบิลประจำ: ใช้รหัสตายตัวของบิลงวดนี้ (สองเครื่องกดบิลเดียวกันจะได้รายการเดียว) และผูกกับบิลไว้
+    record = { id: pendingBill.id, recurringId: pendingBill.recurringId, ...fields };
+    state.expenses = [record, ...state.expenses];
   } else {
     // รายการใหม่ หรือรายการที่กำลังแก้ถูกลบจากเครื่องอื่นไปแล้ว → บันทึกเป็นรายการใหม่ ไม่ทิ้ง
     record = { id: newId(), ...fields };
     state.expenses = [record, ...state.expenses];
   }
+  const wasBill = Boolean(pendingBill);
+  pendingBill = null;
   state.month = monthOf(record.date);
 
   const queued = queueChange(() => markUpsert("expenses", record));
   commitChange();
-  writeStored(lastCategoryStorageKey, String(record.category));
+  if (!wasBill) writeStored(lastCategoryStorageKey, String(record.category));
   const again = !existing && (event.submitter ? event.submitter.hasAttribute("data-save-again") : saveAgainClicked);
   saveAgainClicked = false;
   clearEntryDraft();
@@ -2422,12 +2449,8 @@ document.body.addEventListener("click", (event) => {
       const day = String(Math.min(Number(bill.day) || 1, last)).padStart(2, "0");
       posted = { id: billPostId(bill.id, monthKey), recurringId: bill.id, title: bill.title, category: bill.category, amount: Number(bill.amount), date: `${monthKey}-${day}` };
     }
-    state.expenses = [posted, ...state.expenses.filter((item) => String(item.id) !== String(posted.id))];
-    queueChange(() => markUpsert("expenses", posted));
-
-    state.month = currentMonthKey();
-    commitChange();
-    renderAll();
+    // ไม่ลงทันที: เปิดฟอร์มให้ตรวจ/แก้ยอดของงวดนี้ก่อน (เช่น ค่าน้ำมันที่แต่ละเดือนไม่เท่ากัน) ยอดตั้งต้นของบิลไม่เปลี่ยน
+    openBillModal(posted);
     return;
   }
 
@@ -2480,7 +2503,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=52").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=53").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
