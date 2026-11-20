@@ -571,7 +571,11 @@ function monthsRemaining(item) {
   const today = new Date();
   const [ey, em] = String(end).split("-").map(Number);
   if (!ey || !em) return null;
-  return Math.max(0, (ey - today.getFullYear()) * 12 + (em - (today.getMonth() + 1)) + 1);
+  const left = Math.max(0, (ey - today.getFullYear()) * 12 + (em - (today.getMonth() + 1)) + 1);
+  // งวดของเดือนนี้บันทึกไปแล้ว → ไม่นับเดือนนี้ (ให้ตรงกับยอดคงเหลือของธนาคารหลังจ่าย)
+  const cur = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const paidThisMonth = state.expenses.some((e) => sameId(e.recurringId, item.id) && monthOf(e.date) === cur);
+  return Math.max(0, left - (paidThisMonth ? 1 : 0));
 }
 
 // รายจ่ายประจำเดือนที่ใกล้/เลยกำหนด และยังไม่ได้บันทึกเดือนนี้ → เด้งเตือนในรายจ่ายล่าสุด (ค้างจนกว่าจะกดบันทึก)
@@ -929,7 +933,7 @@ function renderRecurring() {
           let note = `${category.label} · ทุกวันที่ ${item.day}`;
           if (!(Number(item.amount) > 0)) note += " · ไม่ระบุยอด";
           if (remain !== null) {
-            note += installmentEnded(item)
+            note += installmentEnded(item) || remain === 0
               ? " · ผ่อนครบแล้ว ✓"
               : ` · เหลือ ${remain} งวด (คงเหลือ ฿${shortMoney.format(remain * Number(item.amount || 0))})`;
           }
@@ -2517,7 +2521,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=54").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=55").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
