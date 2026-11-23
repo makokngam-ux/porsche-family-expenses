@@ -758,7 +758,7 @@ function donutGradient(items, total) {
 }
 
 function setView(view) {
-  if (!["home", "records", "analysis"].includes(view)) view = "home";
+  if (!["home", "records", "analysis", "bills"].includes(view)) view = "home";
   state.view = view;
   document.querySelectorAll(".phone-screen").forEach((screen) => {
     screen.classList.toggle("is-current", screen.id === view || (view === "home" && screen.classList.contains("home-screen")));
@@ -769,6 +769,12 @@ function setView(view) {
   if (view === "home") window.location.hash = "home";
   if (view === "records") window.location.hash = "records";
   if (view === "analysis") window.location.hash = "analysis";
+  if (view === "bills") window.location.hash = "bills";
+  // หน้าบิลประจำเข้าจากเมนู "เพิ่มเติม" → ให้ปุ่มเพิ่มเติมในแถบล่างเป็นตัวที่ติดสี
+  document.querySelectorAll(".bottom-nav [data-open-actions]").forEach((el) => {
+    el.classList.toggle("active", view === "bills");
+  });
+  if (view === "bills") window.scrollTo(0, 0);
 }
 
 function renderLabels() {
@@ -919,6 +925,29 @@ function recurringPosted(recurring) {
       monthOf(item.date) === state.month,
   );
 }
+
+// ===== หน้าบิลประจำ: แท็บรายเดือน / รายปี =====
+let billsTab = "monthly";
+function renderBillsPage() {
+  document.querySelectorAll("[data-bills-tab]").forEach((button) => {
+    button.classList.toggle("selected", button.dataset.billsTab === billsTab);
+  });
+  document.querySelectorAll("[data-bills-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.billsPanel !== billsTab;
+  });
+  const monthly = (state.recurring || []).filter((item) => item.freq !== "yearly").length;
+  const yearly = (state.recurring || []).filter((item) => item.freq === "yearly").length;
+  document.querySelectorAll('[data-bills-count="monthly"]').forEach((el) => (el.textContent = `(${monthly})`));
+  document.querySelectorAll('[data-bills-count="yearly"]').forEach((el) => (el.textContent = `(${yearly})`));
+  const note = `รายเดือน ${monthly} บิล · รายปี ${yearly} บิล`;
+  document.querySelectorAll("[data-bills-link-note], [data-bills-summary]").forEach((el) => (el.textContent = note));
+}
+document.querySelectorAll("[data-bills-tab]").forEach((button) => {
+  button.addEventListener("click", () => {
+    billsTab = button.dataset.billsTab;
+    renderBillsPage();
+  });
+});
 
 function renderRecurring() {
   const list = document.querySelector("[data-recurring-list]");
@@ -1166,6 +1195,7 @@ function renderAll() {
   renderTrend();
   renderDailyChart();
   renderNewBanner();
+  renderBillsPage();
 }
 
 // กราฟแท่งรายวัน — ยอดรวมที่บันทึกจริงของแต่ละวันในเดือนที่เลือก
@@ -2521,7 +2551,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=55").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=56").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
