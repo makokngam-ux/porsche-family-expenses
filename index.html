@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="app-icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=57" />
+    <link rel="stylesheet" href="styles.css?v=58" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -276,12 +276,14 @@
           <div class="panel-title daily-title">
             <h2>รายวัน <span data-daily-month></span><small class="daily-sum" data-daily-total></small></h2>
           </div>
+          <p class="daily-compare" data-daily-compare hidden></p>
           <div class="segment daily-mode" role="tablist" aria-label="รายการที่แสดงในกราฟรายวัน" data-daily-mode-wrap hidden>
             <button class="selected" role="tab" type="button" data-daily-mode="all">ทั้งหมด</button>
             <button role="tab" type="button" data-daily-mode="nobill">ไม่รวมบิลประจำ</button>
           </div>
           <div class="daily-chart" data-daily-chart></div>
           <div class="daily-detail" data-daily-detail hidden></div>
+          <ul class="daily-items" data-daily-items hidden></ul>
           <p class="daily-hint" data-daily-hint>แตะแท่งเพื่อดูยอดของวันนั้น</p>
         </section>
 
@@ -639,6 +641,6 @@
         </form>
       </div>
     </div>
-    <script src="app.js?v=57"></script>
+    <script src="app.js?v=58"></script>
   </body>
 </html>
