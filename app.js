@@ -1139,6 +1139,7 @@ function trendData() {
       key,
       label: date.toLocaleDateString("th-TH", { month: "short" }).replace(".", ""),
       total: sum(state.expenses.filter((item) => monthOf(item.date) === key)),
+      count: state.expenses.filter((item) => monthOf(item.date) === key).length,
     });
   }
   return rows;
@@ -1148,33 +1149,44 @@ function renderTrend() {
   const rows = trendData();
   const max = Math.max(...rows.map((row) => row.total), 1);
   const width = 320;
-  const top = 18;
+  // เผื่อขอบซ้ายขวาให้ตัวเลขของจุดริมสุดไม่ถูกตัด และเผื่อด้านบนให้ตัวเลขไม่ทับวงกลมของจุดสูงสุด
+  const side = 36;
+  const top = 38;
   const bottom = 146;
   const usable = bottom - top;
-  const xStep = 58;
+  const xStep = (width - side * 2) / Math.max(1, rows.length - 1);
   const points = rows.map((row, index) => {
-    const x = 20 + index * xStep;
-    const y = bottom - (row.total / max) * usable;
-    return { ...row, x, y };
+    const x = Math.round((side + index * xStep) * 10) / 10;
+    const y = Math.round((bottom - (row.total / max) * usable) * 10) / 10;
+    return { ...row, x, y, empty: row.count === 0 };
   });
 
   const linePath = points.map((point, index) => `${index === 0 ? "M" : "L"}${point.x} ${point.y}`).join(" ");
-  const areaPath = `${linePath} L${points.at(-1).x} 150 L${points[0].x} 150 Z`;
+  const areaPath = `${linePath} L${points[points.length - 1].x} 150 L${points[0].x} 150 Z`;
 
   document.querySelector("[data-trend-line]")?.setAttribute("d", linePath);
   document.querySelector("[data-trend-area]")?.setAttribute("d", areaPath);
 
   const pointLayer = document.querySelector("[data-trend-points]");
   if (pointLayer) {
-    pointLayer.innerHTML = points.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="7" />`).join("");
+    // เดือนที่ไม่มีรายการเลย = จุดเส้นประ (ต่างจากเดือนที่มีรายการแต่ยอดน้อย)
+    pointLayer.innerHTML = points.map((point) => `<circle cx="${point.x}" cy="${point.y}" r="6.5"${point.empty ? ' class="empty"' : ""} />`).join("");
   }
 
   const labelLayer = document.querySelector("[data-trend-labels]");
   if (labelLayer) {
     labelLayer.innerHTML = points
-      .map((point) => `<text x="${point.x}" y="${Math.max(12, point.y - 17)}">${shortMoney.format(point.total)}</text>`)
+      .map((point) => {
+        if (!point.empty) return `<text x="${point.x}" y="${point.y - 14}">${shortMoney.format(point.total)}</text>`;
+        // ป้าย "ไม่มีรายการ" วางใต้ชื่อเดือน ไม่ชนเส้นกราฟและตัวเลขของเดือนข้างเคียง
+        return `<text class="empty" x="${point.x}" y="179">ไม่มีรายการ</text>`;
+      })
       .join("");
   }
+
+  document.querySelectorAll("[data-trend-range]").forEach((el) => {
+    el.textContent = `5 เดือนถึง ${formatMonth(state.month)}`;
+  });
 
   const monthLayer = document.querySelector("[data-trend-months]");
   if (monthLayer) {
@@ -1199,6 +1211,12 @@ function renderAll() {
 }
 
 // กราฟแท่งรายวัน — ยอดรวมที่บันทึกจริงของแต่ละวันในเดือนที่เลือก
+// ===== กราฟแท่งรายวัน =====
+// dailyMode: "all" = ทุกรายการ, "nobill" = ไม่รวมรายการที่กดบันทึกจากบิลประจำ (มี recurringId) เช่น ค่างวดรถ ที่ทำให้แท่งวันอื่นเตี้ยจนมองไม่เห็น
+// dailyPick: วันที่ผู้ใช้แตะดู (จำเฉพาะเดือนที่กำลังดู ไม่เก็บลงเครื่อง ไม่เกี่ยวกับข้อมูล/ซิงก์)
+let dailyMode = "all";
+let dailyPick = { month: "", day: null };
+
 function renderDailyChart() {
   document.querySelectorAll("[data-daily-month]").forEach((el) => {
     el.textContent = formatMonth(state.month);
@@ -1206,51 +1224,111 @@ function renderDailyChart() {
   const container = document.querySelector("[data-daily-chart]");
   if (!container) return;
   const days = daysInMonth(state.month);
+  // เฉพาะรายการที่วันที่มีจริงในปฏิทิน (กันข้อมูลเสียทำให้ยอดหัวการ์ดไม่ตรงกับแท่ง)
+  const monthItems = state.expenses.filter((e) => monthOf(e.date) === state.month && isValidDate(toISODate(e.date)));
+  const isBill = (e) => e.recurringId !== "" && e.recurringId !== null && e.recurringId !== undefined;
+  const billTotal = sum(monthItems.filter(isBill));
+  const hasBill = monthItems.some(isBill);
+  // ไม่มีรายการจากบิลในเดือนนี้ → ปุ่มเลือกไม่มีประโยชน์ ซ่อนไว้และกลับไปแสดงทั้งหมด
+  const mode = hasBill ? dailyMode : "all";
+  const shown = mode === "nobill" ? monthItems.filter((e) => !isBill(e)) : monthItems;
   const totals = [];
+  const counts = [];
   for (let d = 1; d <= days; d += 1) {
     const key = `${state.month}-${String(d).padStart(2, "0")}`;
-    totals.push(sum(state.expenses.filter((e) => toISODate(e.date) === key)));
+    const items = shown.filter((e) => toISODate(e.date) === key);
+    totals.push(sum(items));
+    counts.push(items.length);
   }
-  const monthTotal = totals.reduce((s, t) => s + t, 0);
+  const monthTotal = sum(monthItems);
+  const shownTotal = totals.reduce((s, t) => s + t, 0);
   document.querySelectorAll("[data-daily-total]").forEach((el) => {
-    el.textContent = monthTotal ? `รวม ฿${shortMoney.format(monthTotal)}` : "";
+    if (!monthTotal) el.textContent = "";
+    else if (mode === "nobill") el.textContent = `แสดง ฿${shortMoney.format(shownTotal)} · ไม่รวมบิลประจำ ฿${shortMoney.format(billTotal)}`;
+    else el.textContent = `รวม ฿${shortMoney.format(monthTotal)}`;
+  });
+  document.querySelectorAll("[data-daily-mode-wrap]").forEach((el) => {
+    el.hidden = !hasBill;
+  });
+  document.querySelectorAll("[data-daily-mode]").forEach((button) => {
+    button.classList.toggle("selected", button.dataset.dailyMode === mode);
+    button.setAttribute("aria-selected", String(button.dataset.dailyMode === mode));
+  });
+  document.querySelectorAll("[data-daily-hint]").forEach((el) => {
+    el.textContent = mode === "nobill" ? "แตะแท่งเพื่อดูยอดของวันนั้น · ตัดเฉพาะรายการที่กด “บันทึก” จากบิลประจำ" : "แตะแท่งเพื่อดูยอดของวันนั้น";
   });
 
   const max = Math.max(...totals, 1);
-  const W = 320;
-  const H = 158;
-  const top = 24;
-  const bottom = 132;
-  const left = 8;
-  const innerW = W - left * 2;
-  const slot = innerW / days;
-  const barW = Math.max(2, slot - 2);
+  const maxDay = totals.indexOf(Math.max(...totals)) + 1;
+  // วันที่เลือก: วันที่ผู้ใช้แตะ (ถ้ายังอยู่ในเดือนนี้) → วันนี้ถ้ามียอด → วันที่ใช้มากที่สุด
   const today = new Date();
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const todayDay = state.month === currentMonthKey() ? today.getDate() : 0;
+  let picked = null;
+  if (dailyPick.month === state.month && dailyPick.day >= 1 && dailyPick.day <= days) picked = dailyPick.day;
+  else if (todayDay && totals[todayDay - 1] > 0) picked = todayDay;
+  else if (shownTotal > 0) picked = maxDay;
+
+  const W = 320;
+  const H = 150;
+  const top = 26;
+  const bottom = 120;
+  const left = 10;
+  const slot = (W - left * 2) / days;
+  const barW = Math.max(2, slot - 2.4);
 
   let bars = "";
-  let amts = "";
+  let hits = "";
   let labels = "";
+  let amount = "";
   totals.forEach((t, i) => {
     const day = i + 1;
-    const x = left + i * slot;
-    const cx = x + barW / 2;
-    const h = (t / max) * (bottom - top);
+    const x = left + i * slot + (slot - barW) / 2;
+    const cx = left + i * slot + slot / 2;
+    // แท่งที่มียอดสูงอย่างน้อย 2 หน่วย ให้ยังมองเห็นว่าวันนั้นมีรายการ (ยอดจริงดูได้จากการแตะ)
+    const h = t > 0 ? Math.max(2, (t / max) * (bottom - top)) : 0;
     const y = bottom - h;
-    const key = `${state.month}-${String(day).padStart(2, "0")}`;
-    const isToday = key === todayKey;
-    const color = t > 0 ? (isToday ? "#f85b8b" : "#ff9bb2") : "#f3dbe3";
-    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}" rx="2" fill="${color}"><title>วันที่ ${day}: ฿${money.format(t)}</title></rect>`;
-    if (t > 0) {
-      amts += `<text x="${cx.toFixed(1)}" y="${(y - 3).toFixed(1)}" text-anchor="middle" font-size="6.5" font-weight="700" fill="#d6447a">${shortMoney.format(t)}</text>`;
-      labels += `<text x="${cx.toFixed(1)}" y="148" text-anchor="middle" font-size="8" font-weight="700" fill="#5b4e53">${day}</text>`;
-    } else if (day === 1 || day % 5 === 0 || day === days) {
-      labels += `<text x="${cx.toFixed(1)}" y="148" text-anchor="middle" font-size="7.5" fill="#bcaeb4">${day}</text>`;
+    const isPicked = day === picked;
+    if (t > 0) bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="2.5" fill="${isPicked ? "#f85b8b" : "#ffb3c7"}"></rect>`;
+    if (isPicked && t > 0) {
+      // ยอดเหนือแท่งเฉพาะวันที่เลือก และดันเข้าในกรอบถ้าอยู่ริมกราฟ
+      const tx = Math.min(W - 26, Math.max(26, cx));
+      amount = `<text x="${tx.toFixed(1)}" y="${(y - 6).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="800" fill="#c2496f">${shortMoney.format(t)}</text>`;
     }
+    const tick = day === 1 || day % 5 === 0;
+    const nearPicked = picked && Math.abs(day - picked) === 1;
+    if (isPicked || (tick && !nearPicked)) {
+      labels += `<text x="${cx.toFixed(1)}" y="136" text-anchor="middle" font-size="9.5" font-weight="${isPicked ? 800 : 600}" fill="${isPicked ? "#34262c" : "#b3a2a9"}">${day}</text>`;
+    }
+    // พื้นที่แตะสูงเต็มกราฟ ให้แตะวันที่แท่งเตี้ยได้
+    hits += `<rect class="daily-hit" data-daily-day="${day}" x="${(left + i * slot).toFixed(1)}" y="0" width="${slot.toFixed(1)}" height="${H}" fill="transparent"><title>วันที่ ${day}: ฿${money.format(t)}</title></rect>`;
   });
+  const axis = `<line x1="${left}" x2="${W - left}" y1="${bottom}" y2="${bottom}" stroke="#f1dce4" stroke-width="1"></line>`;
+  container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟแท่งยอดรวมรายวัน">${axis}${bars}${amount}${labels}${hits}</svg>`;
 
-  container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="กราฟแท่งยอดรวมรายวัน">${bars}${amts}${labels}</svg>`;
+  document.querySelectorAll("[data-daily-detail]").forEach((el) => {
+    el.hidden = !picked;
+    if (!picked) return;
+    const [, monthNumber] = state.month.split("-").map(Number);
+    const t = totals[picked - 1];
+    const n = counts[picked - 1];
+    const top1 = picked === maxDay && t > 0 ? (mode === "nobill" ? " · สูงสุดเมื่อไม่นับบิล" : " · ใช้มากที่สุดของเดือน") : "";
+    const note = n > 0 ? `${n} รายการ${top1}` : mode === "nobill" ? "ไม่มีรายการ (ไม่นับบิลประจำ)" : "ไม่มีรายการ";
+    el.innerHTML = `<b>วันที่ ${picked} ${THAI_MONTHS[monthNumber - 1]}<small>${note}</small></b><strong>฿ ${money.format(t)}</strong>`;
+  });
 }
+
+document.querySelector("[data-daily-chart]")?.addEventListener("click", (event) => {
+  const hit = event.target.closest("[data-daily-day]");
+  if (!hit) return;
+  dailyPick = { month: state.month, day: Number(hit.dataset.dailyDay) };
+  renderDailyChart();
+});
+document.querySelectorAll("[data-daily-mode]").forEach((button) => {
+  button.addEventListener("click", () => {
+    dailyMode = button.dataset.dailyMode;
+    renderDailyChart();
+  });
+});
 
 function renderYearly() {
   const list = document.querySelector("[data-yearly-list]");
@@ -2551,7 +2629,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=56").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=57").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
