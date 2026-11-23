@@ -1211,6 +1211,31 @@ function renderAll() {
 }
 
 // กราฟแท่งรายวัน — ยอดรวมที่บันทึกจริงของแต่ละวันในเดือนที่เลือก
+// เทียบยอดกับเดือนก่อน "ช่วงวันเท่ากัน": เดือนปัจจุบันเทียบถึงวันนี้, เดือนที่จบแล้วเทียบทั้งเดือน, เดือนอนาคตไม่เทียบ
+function monthCompare() {
+  const cur = currentMonthKey();
+  if (!/^\d{4}-\d{2}$/.test(state.month) || state.month > cur) return null;
+  const [year, month] = state.month.split("-").map(Number);
+  const prevDate = new Date(year, month - 2, 1);
+  const prevKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+  const partial = state.month === cur;
+  const cutoff = partial ? new Date().getDate() : 31;
+  const upTo = (key) =>
+    sum(state.expenses.filter((e) => monthOf(e.date) === key && isValidDate(toISODate(e.date)) && Number(toISODate(e.date).slice(8, 10)) <= cutoff));
+  const now = upTo(state.month);
+  const before = upTo(prevKey);
+  const scope = partial ? `ถึงวันที่ ${cutoff}` : "ทั้งเดือน";
+  const versus = partial ? "เดือนก่อนช่วงเดียวกัน" : "เดือนก่อน";
+  if (!(before > 0)) return { tone: "", text: now > 0 ? `${scope}: เดือนก่อนไม่มีรายการให้เทียบ` : "" };
+  const diff = now - before;
+  if (Math.abs(diff) < 0.005) return { tone: "", text: `${scope}: ใช้เท่ากับ${versus}` };
+  const percent = Math.round((Math.abs(diff) / before) * 100);
+  return {
+    tone: diff > 0 ? "more" : "less",
+    text: `${scope}: ใช้${diff > 0 ? "มากกว่า" : "น้อยกว่า"}${versus} ฿${shortMoney.format(Math.abs(diff))} (${percent}%)`,
+  };
+}
+
 // ===== กราฟแท่งรายวัน =====
 // dailyMode: "all" = ทุกรายการ, "nobill" = ไม่รวมรายการที่กดบันทึกจากบิลประจำ (มี recurringId) เช่น ค่างวดรถ ที่ทำให้แท่งวันอื่นเตี้ยจนมองไม่เห็น
 // dailyPick: วันที่ผู้ใช้แตะดู (จำเฉพาะเดือนที่กำลังดู ไม่เก็บลงเครื่อง ไม่เกี่ยวกับข้อมูล/ซิงก์)
@@ -1256,6 +1281,13 @@ function renderDailyChart() {
   });
   document.querySelectorAll("[data-daily-hint]").forEach((el) => {
     el.textContent = mode === "nobill" ? "แตะแท่งเพื่อดูยอดของวันนั้น · ตัดเฉพาะรายการที่กด “บันทึก” จากบิลประจำ" : "แตะแท่งเพื่อดูยอดของวันนั้น";
+  });
+
+  const compare = monthCompare();
+  document.querySelectorAll("[data-daily-compare]").forEach((el) => {
+    el.hidden = !(compare && compare.text);
+    el.textContent = compare ? compare.text : "";
+    el.dataset.tone = compare ? compare.tone : "";
   });
 
   const max = Math.max(...totals, 1);
@@ -1314,6 +1346,23 @@ function renderDailyChart() {
     const top1 = picked === maxDay && t > 0 ? (mode === "nobill" ? " · สูงสุดเมื่อไม่นับบิล" : " · ใช้มากที่สุดของเดือน") : "";
     const note = n > 0 ? `${n} รายการ${top1}` : mode === "nobill" ? "ไม่มีรายการ (ไม่นับบิลประจำ)" : "ไม่มีรายการ";
     el.innerHTML = `<b>วันที่ ${picked} ${THAI_MONTHS[monthNumber - 1]}<small>${note}</small></b><strong>฿ ${money.format(t)}</strong>`;
+  });
+
+  // รายการของวันที่เลือก (ตามชุดที่กำลังแสดง) เรียงยอดมากไปน้อย
+  document.querySelectorAll("[data-daily-items]").forEach((el) => {
+    const key = picked ? `${state.month}-${String(picked).padStart(2, "0")}` : "";
+    const items = picked ? shown.filter((e) => toISODate(e.date) === key).sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0)) : [];
+    el.hidden = items.length === 0;
+    const limit = 8;
+    const rows = items
+      .slice(0, limit)
+      .map((item) => {
+        const category = categories[item.category] || categories.other;
+        return `<li>${iconBadge(item.category)}<b>${esc(item.title)}<small>${category.label}</small></b><strong>฿ ${money.format(item.amount)}</strong></li>`;
+      })
+      .join("");
+    const more = items.length > limit ? `<li class="more">และอีก ${items.length - limit} รายการ</li>` : "";
+    el.innerHTML = rows + more;
   });
 }
 
@@ -2629,7 +2678,7 @@ document.querySelectorAll(".chart-label").forEach((label) => {
 });
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js?v=57").catch(() => {});
+  navigator.serviceWorker.register("service-worker.js?v=58").catch(() => {});
   // อัปเดตตัวเองอัตโนมัติ: พอมี service worker เวอร์ชันใหม่เข้ามาคุม ให้รีโหลดหน้าทันที (กันค้างเวอร์ชันเก่าในไอคอนโฮม)
   let swReloaded = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
