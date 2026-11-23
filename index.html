@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="app-icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=56" />
+    <link rel="stylesheet" href="styles.css?v=57" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -238,11 +238,14 @@
 
         <section class="panel trend-panel">
           <div class="panel-title">
-            <h2>แนวโน้มค่าใช้จ่าย</h2>
+            <div class="trend-head">
+              <span class="kid-badge" aria-hidden="true"><img src="child-full-body-cutout.png" alt="" /></span>
+              <h2>แนวโน้มค่าใช้จ่าย<small data-trend-range>5 เดือนล่าสุด</small></h2>
+            </div>
             <a href="#records" data-open-records>ดูทั้งหมด ›</a>
           </div>
           <div class="trend-chart" aria-label="กราฟเส้นแนวโน้มค่าใช้จ่ายรายเดือน">
-            <svg viewBox="0 0 320 170" role="img">
+            <svg viewBox="0 0 320 184" role="img">
               <defs>
                 <linearGradient id="trendFill" x1="0" x2="0" y1="0" y2="1">
                   <stop offset="0%" stop-color="#ff6f98" stop-opacity=".24" />
@@ -266,17 +269,20 @@
                 <text x="132" y="166">มี.ค.</text><text x="190" y="166">เม.ย.</text>
               </g>
             </svg>
-            <div class="kid-peek" aria-hidden="true">
-              <img src="child-full-body-cutout.png" alt="" />
-            </div>
           </div>
         </section>
 
         <section class="panel">
-          <div class="panel-title">
-            <h2>รายวัน <span data-daily-month></span> <span class="head-sum" data-daily-total></span></h2>
+          <div class="panel-title daily-title">
+            <h2>รายวัน <span data-daily-month></span><small class="daily-sum" data-daily-total></small></h2>
+          </div>
+          <div class="segment daily-mode" role="tablist" aria-label="รายการที่แสดงในกราฟรายวัน" data-daily-mode-wrap hidden>
+            <button class="selected" role="tab" type="button" data-daily-mode="all">ทั้งหมด</button>
+            <button role="tab" type="button" data-daily-mode="nobill">ไม่รวมบิลประจำ</button>
           </div>
           <div class="daily-chart" data-daily-chart></div>
+          <div class="daily-detail" data-daily-detail hidden></div>
+          <p class="daily-hint" data-daily-hint>แตะแท่งเพื่อดูยอดของวันนั้น</p>
         </section>
 
         <footer class="bottom-nav">
@@ -633,6 +639,6 @@
         </form>
       </div>
     </div>
-    <script src="app.js?v=56"></script>
+    <script src="app.js?v=57"></script>
   </body>
 </html>
