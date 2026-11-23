@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="app-icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
-    <link rel="stylesheet" href="styles.css?v=55" />
+    <link rel="stylesheet" href="styles.css?v=56" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -338,6 +338,12 @@
           <button class="save-button small-action" type="button" data-export-csv>CSV</button>
         </section>
 
+        <a class="bills-link" href="#bills" data-nav="bills">
+          <span class="category-icon"><svg class="svg-icon"><use href="#i-repeat"></use></svg></span>
+          <b>บิลประจำ<small data-bills-link-note>รายเดือน / รายปี</small></b>
+          <i aria-hidden="true">›</i>
+        </a>
+
         <section class="panel">
           <div class="panel-title">
             <h2>รายการทั้งหมด</h2>
@@ -346,7 +352,36 @@
           <ul class="transaction-list full-list" data-full-transaction-list></ul>
         </section>
 
-        <section class="panel recurring-panel">
+        <footer class="bottom-nav">
+          <a href="#home" data-nav="home"><span><svg class="svg-icon"><use href="#i-home"></use></svg></span>หน้าหลัก</a>
+          <a class="active" href="#records" data-nav="records"><span><svg class="svg-icon"><use href="#i-list"></use></svg></span>บันทึกรายจ่าย</a>
+          <button class="add-expense-button" aria-label="เพิ่มรายการ">+</button>
+          <a href="#analysis" data-nav="analysis"><span><svg class="svg-icon"><use href="#i-chart"></use></svg></span>สรุปรายงาน</a>
+          <a href="#more" data-open-actions><span><svg class="svg-icon"><use href="#i-more"></use></svg></span>เพิ่มเติม</a>
+        </footer>
+      </section>
+
+      <!-- หน้าบิลประจำ (v56): ย้ายรายจ่ายประจำรายเดือน/รายปีมาจากหน้าบันทึกรายจ่าย เพราะไม่ต้องดูทุกวัน -->
+      <section class="phone-screen bills-screen" id="bills">
+        <div class="statusbar">
+          <span>9:41</span>
+          <span class="signal">▮▮▮  wifi  ▰</span>
+        </div>
+        <header class="page-header">
+          <button class="icon-button" aria-label="ย้อนกลับ" data-nav="records">‹</button>
+          <div>
+            <h1>บิลประจำ</h1>
+            <p><span data-bills-summary></span></p>
+          </div>
+          <span class="icon-button" aria-hidden="true"></span>
+        </header>
+
+        <div class="segment bills-segment" role="tablist" aria-label="ประเภทบิล">
+          <button class="selected" role="tab" data-bills-tab="monthly">รายเดือน <span data-bills-count="monthly"></span></button>
+          <button role="tab" data-bills-tab="yearly">รายปี <span data-bills-count="yearly"></span></button>
+        </div>
+
+        <section class="panel recurring-panel" data-bills-panel="monthly">
           <div class="panel-title">
             <h2>รายจ่ายประจำ (รายเดือน) <span class="head-sum" data-recurring-total></span></h2>
             <a href="#recurring" data-open-recurring>เพิ่มบิล ›</a>
@@ -354,7 +389,7 @@
           <ul class="recurring-list" data-recurring-list></ul>
         </section>
 
-        <section class="panel recurring-panel">
+        <section class="panel recurring-panel" data-bills-panel="yearly" hidden>
           <div class="panel-title">
             <h2>รายจ่ายประจำปี <span class="head-sum" data-yearly-total></span></h2>
             <a href="#recurring" data-open-recurring-yearly>เพิ่มบิล ›</a>
@@ -364,7 +399,7 @@
 
         <footer class="bottom-nav">
           <a href="#home" data-nav="home"><span><svg class="svg-icon"><use href="#i-home"></use></svg></span>หน้าหลัก</a>
-          <a class="active" href="#records" data-nav="records"><span><svg class="svg-icon"><use href="#i-list"></use></svg></span>บันทึกรายจ่าย</a>
+          <a href="#records" data-nav="records"><span><svg class="svg-icon"><use href="#i-list"></use></svg></span>บันทึกรายจ่าย</a>
           <button class="add-expense-button" aria-label="เพิ่มรายการ">+</button>
           <a href="#analysis" data-nav="analysis"><span><svg class="svg-icon"><use href="#i-chart"></use></svg></span>สรุปรายงาน</a>
           <a href="#more" data-open-actions><span><svg class="svg-icon"><use href="#i-more"></use></svg></span>เพิ่มเติม</a>
@@ -440,6 +475,7 @@
           <button class="close-actions close-modal" type="button" aria-label="ปิด">×</button>
         </div>
         <div class="action-grid">
+          <button type="button" data-nav="bills"><span class="action-ic"><svg class="svg-icon"><use href="#i-repeat"></use></svg></span>บิลประจำ (รายเดือน / รายปี)</button>
           <button type="button" data-open-recurring><span class="action-ic"><svg class="svg-icon"><use href="#i-repeat"></use></svg></span>เพิ่มรายจ่ายประจำ</button>
           <button type="button" data-open-budget><span class="action-ic"><svg class="svg-icon"><use href="#i-budget"></use></svg></span>ตั้งงบประมาณ</button>
           <button type="button" data-nav="records"><span class="action-ic"><svg class="svg-icon"><use href="#i-list"></use></svg></span>ดูรายการทั้งหมด</button>
@@ -597,6 +633,6 @@
         </form>
       </div>
     </div>
-    <script src="app.js?v=55"></script>
+    <script src="app.js?v=56"></script>
   </body>
 </html>
