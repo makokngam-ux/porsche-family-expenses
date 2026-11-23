@@ -1916,3 +1916,17 @@ body.entry-open .sync-badge {
 .daily-hint { margin: 8px 2px 0; font-size: 11.5px; color: var(--muted); }
 /* ตัวเลขบนกราฟแนวโน้มมีขอบขาว อ่านออกแม้เส้นกราฟวิ่งผ่านด้านหลัง */
 .trend-chart .labels text { paint-order: stroke; stroke: #fff; stroke-width: 3.5px; stroke-linejoin: round; }
+
+/* ===== v58: เทียบกับเดือนก่อน + รายการของวันที่แตะในกราฟรายวัน ===== */
+.daily-compare { margin: 2px 0 8px; padding: 8px 12px; border-radius: 12px; font-size: 12.5px; font-weight: 700; line-height: 1.4; color: #5b4e53; background: #f7f1f3; }
+.daily-compare[hidden] { display: none; }
+.daily-compare[data-tone="less"] { color: #177a55; background: #e6f8f0; }
+.daily-compare[data-tone="more"] { color: #a35200; background: #fff1dc; }
+.daily-items { list-style: none; margin: 6px 0 0; padding: 0; }
+.daily-items[hidden] { display: none; }
+.daily-items li { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.daily-items li:last-child { border-bottom: 0; }
+.daily-items b { flex: 1; min-width: 0; line-height: 1.25; overflow-wrap: anywhere; }
+.daily-items small { display: block; margin-top: 2px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.daily-items strong { flex: 0 0 auto; white-space: nowrap; }
+.daily-items li.more { justify-content: center; font-size: 12px; font-weight: 700; color: var(--muted); }
