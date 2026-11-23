@@ -1888,3 +1888,31 @@ body.entry-open .sync-badge {
   .bills-screen .recurring-list .edit-expense,
   .bills-screen .recurring-list .delete-expense { grid-column: auto; }
 }
+
+/* ===== v57: กราฟหน้าสรุปรายงาน ===== */
+/* รูปน้องพอร์ชย้ายจากมุมกราฟ (บังตัวเลข) มาอยู่ข้างหัวข้อ */
+.trend-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.trend-head h2 { margin: 0; }
+.trend-head h2 small,
+.daily-title h2 small { display: block; margin-top: 2px; font-size: 12px; font-weight: 700; color: var(--pink); }
+.kid-badge { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; background: #ffe6ee; }
+.kid-badge img { display: block; width: 100%; height: 190%; object-fit: cover; object-position: center top; }
+.trend-chart { min-height: 0; }
+.trend-chart text { font-size: 11.5px; }
+.trend-chart .months text { font-size: 12px; }
+.trend-chart .points circle { stroke-width: 3.5; }
+.trend-chart .points circle.empty { stroke-dasharray: 3 2.5; }
+.trend-chart .labels text.empty { fill: #9a8a92; font-size: 9.5px; font-weight: 700; }
+/* กราฟรายวัน: ปุ่มเลือกชุดรายการ, แท่งแตะได้, แถวรายละเอียดของวันที่เลือก */
+.segment.daily-mode { grid-template-columns: repeat(2, 1fr); margin: 4px 0 8px; box-shadow: none; background: #fdeef2; }
+.segment.daily-mode[hidden] { display: none; }
+.segment.daily-mode button { min-height: 34px; font-size: 12.5px; }
+.daily-chart .daily-hit { cursor: pointer; }
+.daily-detail { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 10px 12px; border-radius: 14px; font-size: 13px; background: #fff3f6; }
+.daily-detail[hidden] { display: none; }
+.daily-detail b { min-width: 0; line-height: 1.3; }
+.daily-detail small { display: block; margin-top: 2px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.daily-detail strong { flex: 0 0 auto; white-space: nowrap; color: var(--pink); }
+.daily-hint { margin: 8px 2px 0; font-size: 11.5px; color: var(--muted); }
+/* ตัวเลขบนกราฟแนวโน้มมีขอบขาว อ่านออกแม้เส้นกราฟวิ่งผ่านด้านหลัง */
+.trend-chart .labels text { paint-order: stroke; stroke: #fff; stroke-width: 3.5px; stroke-linejoin: round; }
